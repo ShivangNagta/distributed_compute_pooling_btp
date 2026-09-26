@@ -1,0 +1,16 @@
+---
+config:
+  theme: dark
+  layout: elk
+  look: handDrawn
+  fontFamily: '''Open Sans Variable'', sans-serif'
+  themeVariables:
+    fontFamily: '''Open Sans Variable'', sans-serif'
+---
+flowchart BT
+    User["User / Job Submitter"] -- Submit Job --> Coordinator["Coordinator"]
+    Coordinator <-- Job / Results --> WorkerA["Browser Worker A"] & WorkerB["Browser Worker B"]
+    WorkerA --- ResourcesA["CPU / GPU\nResource Information"]
+    WorkerB --- ResourcesB["CPU / GPU\nResource Information"]
+    ResourcesA -- Metrics --> Coordinator
+    ResourcesB -- Metrics --> Coordinator

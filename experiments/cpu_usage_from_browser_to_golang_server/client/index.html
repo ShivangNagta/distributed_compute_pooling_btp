@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client</title>
+</head>
+<body>
+    <button id="cpu">Give cpuPerformance info to coordinator</button>
+    <div id="output"></div>
+    <script>
+        async function uploadPerformance() {
+            const response = await fetch("http://localhost:8090/cpu/performance", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ "Cpu": `${navigator.cpuPerformance}` })
+                })
+            const data = await response.json(); 
+            document.getElementById("output").textContent = data
+            }
+        const button = document.getElementById("cpu");
+        button.addEventListener("click", uploadPerformance);
+    </script>
+</body>
+</html>

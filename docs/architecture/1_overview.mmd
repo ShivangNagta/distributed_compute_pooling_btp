@@ -1,0 +1,33 @@
+---
+config:
+  theme: dark
+  layout: elk
+  look: handDrawn
+  fontFamily: '''Open Sans Variable'', sans-serif'
+  themeVariables:
+    fontFamily: '''Open Sans Variable'', sans-serif'
+---
+flowchart BT
+    Client["Create Job"] -- zero code --> JobAPI["Submit Job"]
+    JobAPI -- "3. POST /job/submit" --- Coordinator["Coordinator"]
+    WorkerA["Join Room"] -- Results / Status --> Coordinator
+    ExecutionA["Execution Runtimes"] --> WASMA["WASM Execution"] & WebGPUA["wgpu Execution"]
+    Client -- define --- Job["Job Definition"]
+    Job --> JobAPI
+    Client -- wasm/ wgpu --> JobAPI
+    n3["Private Room"] -- "1. POST /room/create" --> Coordinator
+    n4["Client"] --- n3
+    n3 --> Client
+    n5["Browser Worker"] -- room token --> WorkerA
+    n5 --> ExecutionA
+    n1["Native Worker"] -- room token --> WorkerA
+    n1 --> ExecutionA
+    WorkerA -- "2. SSE/ Websocket /room/join" --> Coordinator
+    Coordinator -- "4. Submit Job to Worker" --> n5 & n1
+    ExecutionA -- "5. Job Finished" --> Coordinator
+
+    n3@{ shape: rect}
+    n4@{ shape: rect}
+    n5@{ shape: rect}
+    n1@{ shape: rect}
+    

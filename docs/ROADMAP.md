@@ -2,7 +2,7 @@
 
 ## 2026 Goal
 
-Build a working system where multiple browsers contribute CPU/GPU resources and can execute CPU and GPU jobs remotely.
+Build a working system where multiple browsers contribute CPU/GPU resources and can execute CPU and GPU jobs remotely mainly via WASM and WGPU
 
 **2026:**
 

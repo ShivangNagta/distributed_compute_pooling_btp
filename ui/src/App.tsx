@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
+import ClientPage from './pages/ClientPage'
 
-function App() {
+function HomePage() {
   const [message, setMessage] = useState("")
 
   // https://jasonwatmore.com/post/2020/02/01/react-fetch-http-post-request-examples
@@ -27,6 +28,10 @@ function App() {
     </div>
     </>
   )
+}
+
+function App() {
+  return window.location.pathname === '/client' ? <ClientPage /> : <HomePage />
 }
 
 export default App

@@ -56,7 +56,7 @@ function HomePage() {
   // https://websocket.org/guides/frameworks/react/
   useEffect(() => {
     const socket = new WebSocket(
-      `ws://localhost:3000/ws/${encodeURIComponent("please-fill")}/${encodeURIComponent("please-fill")}`
+      `ws://localhost:3000/ws/join_room/${encodeURIComponent("please-fill")}/${encodeURIComponent("please-fill")}`
     );
     wsRef.current = socket;
     console.log("connected")

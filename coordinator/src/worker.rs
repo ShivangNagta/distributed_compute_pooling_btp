@@ -7,6 +7,7 @@ use axum::{
 };
 use tokio::sync::mpsc;
 use futures_util::{SinkExt, StreamExt};
+use super::room::RoomStatus;
 use super::room::{RoomStatus, Room};
 use crate::app_state::{SharedAppState, BUFFER_SIZE};
 
@@ -34,7 +35,7 @@ pub async fn ws_worker_handler(
         let app = state.lock().await;
         app.room_table
             .get(&room_id)
-            .is_some_and(|room| matches!(&room.room_token, room_token))
+            .is_some_and(|room| room.room_token == room_token)
     };
 
     if !is_authenticated {
@@ -67,18 +68,6 @@ async fn handle_socket(socket: WebSocket, state: SharedAppState, room_token: Str
                 if ws_sender.send(msg.clone()).await.is_err() {
                     break;
                 }
-                println!("{:?}", msg);
-                {
-                    // send to client
-                    let app = state.lock().await;
-                    let room: &Room = app.room_table.get(&room_id).unwrap();
-                    let client_tx_channel = app.client_conn.connections.get(&room.client_token).unwrap();
-
-                    if client_tx_channel.send(msg).await.is_err() {
-                        break;
-                    }
-                }
-
             }
         }
     );
@@ -89,7 +78,20 @@ async fn handle_socket(socket: WebSocket, state: SharedAppState, room_token: Str
             break;
         }
         
-        // preprocessing logic ...
+        // Forward messages received from the worker to the room's client.
+        let client_tx_channel = {
+            let app = state.lock().await;
+            app.room_table
+                .get(&room_id)
+                .and_then(|room| app.client_conn.connections.get(&room.client_token))
+                .cloned()
+        };
+
+        if let Some(client_tx_channel) = client_tx_channel {
+            if client_tx_channel.send(msg).await.is_err() {
+                break;
+            }
+        }
     }
 
     // if function reaches here, connection needs to be removed from the map

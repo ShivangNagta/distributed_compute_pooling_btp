@@ -16,8 +16,6 @@ pub async fn ws_handler(
     Path((room_id, client_token)): Path<(String, String)>,
     ws: WebSocketUpgrade,
 ) -> Response {
-    println!("{}", room_id);
-    println!("{}", client_token);
     // verify if the room_id belongs to active room
     let is_active = {
         let app = state.lock().await;
@@ -31,14 +29,12 @@ pub async fn ws_handler(
             .into_response();
     }
 
-    println!("Active!!!!!!!!");
-
     // authenticate client via client_token
     let is_authenticated = {
         let app = state.lock().await;
         app.room_table
             .get(&room_id)
-            .is_some_and(|room| matches!(&room.client_token, client_token))
+            .is_some_and(|room| room.client_token == client_token)
     };
 
     if !is_authenticated {
@@ -69,6 +65,7 @@ async fn handle_socket(socket: WebSocket, state: SharedAppState, client_token: S
     let writer = tokio::spawn(
         async move {
             while let Some(msg) = rx.recv().await {
+                println!("[Client] received {:?}", msg);
 
                 // send updates/ jobs to the workers ...
 
@@ -80,12 +77,29 @@ async fn handle_socket(socket: WebSocket, state: SharedAppState, client_token: S
     );
 
     while let Some(Ok(msg)) = ws_receiver.next().await {
+        // recieve job from browser websocket here
         // if it receives close message, close the connection
         println!("{:?}", msg);
         if matches!(msg, Message::Close(_)){
             break;
         }
         
+        // send the jobs to workers through
+        /*
+            let worker_tx_channel = {
+                let app = state.lock().await;
+                app.room_table
+                    .get(&room_id)
+                    .and_then(|room| app.worker_conn.connections.get(&worker_id))
+                    .cloned()
+            };
+
+            if let Some(worker_tx_channel) = worker_tx_channel {
+                if worker_tx_channel.send(msg).await.is_err() {
+                    break;
+                }
+            }
+        */
         // receving updates from the workers ...
     }
 

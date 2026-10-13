@@ -8,6 +8,7 @@ use axum::{
 use tokio::sync::mpsc;
 use futures_util::{SinkExt, StreamExt};
 use super::room::RoomStatus;
+use super::room::{RoomStatus, Room};
 use crate::app_state::{SharedAppState, BUFFER_SIZE};
 
 pub async fn ws_worker_handler(
@@ -67,7 +68,6 @@ async fn handle_socket(socket: WebSocket, state: SharedAppState, room_token: Str
                 if ws_sender.send(msg.clone()).await.is_err() {
                     break;
                 }
-                // println!("{:?}", msg);
             }
         }
     );

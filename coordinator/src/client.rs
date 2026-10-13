@@ -16,8 +16,6 @@ pub async fn ws_handler(
     Path((room_id, client_token)): Path<(String, String)>,
     ws: WebSocketUpgrade,
 ) -> Response {
-    // println!("{}", room_id);
-    // println!("{}", client_token);
     // verify if the room_id belongs to active room
     let is_active = {
         let app = state.lock().await;
@@ -43,6 +41,8 @@ pub async fn ws_handler(
         return (StatusCode::UNAUTHORIZED, "Invalid or inactive client token")
             .into_response();
     }
+
+    print!("Hello");
     
     ws.on_upgrade(move |socket| handle_socket(socket, state, client_token))
 }
@@ -68,6 +68,7 @@ async fn handle_socket(socket: WebSocket, state: SharedAppState, client_token: S
                 println!("[Client] received {:?}", msg);
 
                 // send updates/ jobs to the workers ...
+
                 if ws_sender.send(msg).await.is_err() {
                     break;
                 }
@@ -78,6 +79,7 @@ async fn handle_socket(socket: WebSocket, state: SharedAppState, client_token: S
     while let Some(Ok(msg)) = ws_receiver.next().await {
         // recieve job from browser websocket here
         // if it receives close message, close the connection
+        println!("{:?}", msg);
         if matches!(msg, Message::Close(_)){
             break;
         }
@@ -98,6 +100,7 @@ async fn handle_socket(socket: WebSocket, state: SharedAppState, client_token: S
                 }
             }
         */
+        // receving updates from the workers ...
     }
 
     // if function reaches here, connection needs to be removed from the map

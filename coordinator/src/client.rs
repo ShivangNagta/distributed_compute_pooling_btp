@@ -1,68 +1,52 @@
-use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
-use crate::room::RoomTable;
+use crate::room::{RoomTable};
 use axum::{
     extract::{Path, State, ws::{WebSocketUpgrade, WebSocket, Message}},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use tokio::sync::mpsc;
-use tokio::sync::Mutex;
 use futures_util::{SinkExt, StreamExt};
 use rand::{distr::Alphanumeric, RngExt};
 use super::room::{Room, RoomStatus};
-
-// Sending/Receiving buffer size
-const BUFFER_SIZE: usize = 100;
-
-pub type SharedAppState = Arc<Mutex<AppState>>;
-
-// Shared struct for all clients
-pub struct AppState {
-    pub room_table: RoomTable, // for create_room_handler
-    pub client_conn: ClientConn, // 
-}
-
-// Constructor of AppState
-impl AppState {
-    pub fn new() -> Self {
-        Self {
-            room_table: RoomTable::new(),
-            client_conn: ClientConn::new(),
-        }
-    }
-}
-
-// Map of WS connections
-pub struct ClientConn {
-    // map from client_token to mpsc channel
-    connections: HashMap<String, mpsc::Sender<Message>>,
-}
-
-// Constructor of ClientConn
-impl ClientConn {
-    fn new() -> Self {
-        Self { connections: HashMap::new() }
-    }
-}
+use crate::app_state::{SharedAppState, BUFFER_SIZE};
 
 pub async fn ws_handler(
     State(state): State<SharedAppState>,
-    Path(client_token): Path<String>,
+    Path((room_id, client_token)): Path<(String, String)>,
     ws: WebSocketUpgrade,
 ) -> Response {
-    // verify if the client_token belongs to active room
+    println!("{}", room_id);
+    println!("{}", client_token);
+    // verify if the room_id belongs to active room
     let is_active = {
         let app = state.lock().await;
         app.room_table
-            .get(&client_token)
+            .get(&room_id)
             .is_some_and(|room| matches!(&room.status, RoomStatus::Active))
+        };
+        
+    if !is_active {
+        return (StatusCode::NOT_FOUND, "Room is not active")
+            .into_response();
+    }
+
+    println!("Active!!!!!!!!");
+
+    // authenticate client via client_token
+    let is_authenticated = {
+        let app = state.lock().await;
+        app.room_table
+            .get(&room_id)
+            .is_some_and(|room| matches!(&room.client_token, client_token))
     };
 
-    if !is_active {
+    if !is_authenticated {
         return (StatusCode::UNAUTHORIZED, "Invalid or inactive client token")
             .into_response();
     }
+
+    print!("Hello");
     
     ws.on_upgrade(move |socket| handle_socket(socket, state, client_token))
 }
@@ -85,6 +69,9 @@ async fn handle_socket(socket: WebSocket, state: SharedAppState, client_token: S
     let writer = tokio::spawn(
         async move {
             while let Some(msg) = rx.recv().await {
+
+                // send updates/ jobs to the workers ...
+
                 if ws_sender.send(msg).await.is_err() {
                     break;
                 }
@@ -94,11 +81,12 @@ async fn handle_socket(socket: WebSocket, state: SharedAppState, client_token: S
 
     while let Some(Ok(msg)) = ws_receiver.next().await {
         // if it receives close message, close the connection
+        println!("{:?}", msg);
         if matches!(msg, Message::Close(_)){
             break;
         }
         
-        // preprocessing logic ...
+        // receving updates from the workers ...
     }
 
     // if function reaches here, connection needs to be removed from the map
@@ -116,27 +104,24 @@ fn generate_token() -> String {
         .collect()
 }
 
-pub fn create_shared_state() -> SharedAppState {
-    Arc::new(Mutex::new(AppState::new()))
-}
-
 pub async fn create_room_handler(
     State(state): State<SharedAppState>,
 ) -> impl IntoResponse {
     let mut app = state.lock().await;
-    let (client_token, room_token) = create_room(&mut app.room_table);
+    let (room_id, client_token, room_token) = create_room(&mut app.room_table);
 
-    format!("client_token={client_token}&room_token={room_token}")
+    format!("room_id={room_id}&client_token={client_token}&room_token={room_token}")
 }
 
-fn create_room(room_table: &mut RoomTable) -> (String, String) {
+fn create_room(room_table: &mut RoomTable) -> (Uuid, String, String) {
     // generate tokens
     let client_token = generate_token(); // for client
     let room_token = generate_token(); // for workers
+    let room_id = Uuid::new_v4();
 
     // Room instantiation
     let new_room = Room::new(
-        Uuid::new_v4(), 
+        room_id,
         room_token.clone(), 
         client_token.clone(), 
         RoomStatus::Active
@@ -147,8 +132,8 @@ fn create_room(room_table: &mut RoomTable) -> (String, String) {
     println!("Room struct with room_id: {} created successfully", room_id);
 
     // save room info in the database
-    room_table.insert(client_token.clone(), new_room);
+    room_table.insert(room_id.clone(), new_room);
     println!("Room info with room_id: {} added to database", room_id);
 
-    (client_token, room_token)
+    (room_id, client_token, room_token)
 }

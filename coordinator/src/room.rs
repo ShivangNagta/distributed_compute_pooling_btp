@@ -33,7 +33,7 @@ impl Room {
 }
 
 pub struct RoomTable {
-    pub rooms: HashMap<String, Room>, // client_token to Room
+    pub rooms: HashMap<String, Room>, // room_id to Room
 }
 
 impl RoomTable {
@@ -44,22 +44,22 @@ impl RoomTable {
     }
 
      // Add or update a room
-    pub fn insert(&mut self, client_token: String, room: Room) {
-        self.rooms.insert(client_token, room);
+    pub fn insert(&mut self, room_id: Uuid, room: Room) {
+        self.rooms.insert(room_id.to_string(), room);
     }
 
     // Get a read-only reference to a room
-    pub fn get(&self, client_token: &str) -> Option<&Room> {
-        self.rooms.get(client_token)
+    pub fn get(&self, room_id: &str) -> Option<&Room> {
+        self.rooms.get(room_id)
     }
 
     // Get a mutable reference to a room (to modify its properties)
-    pub fn get_mut(&mut self, client_token: &str) -> Option<&mut Room> {
-        self.rooms.get_mut(client_token)
+    pub fn get_mut(&mut self, room_id: &str) -> Option<&mut Room> {
+        self.rooms.get_mut(room_id)
     }
 
     // Remove a room from the table
-    pub fn remove(&mut self, client_token: &str) -> Option<Room> {
-        self.rooms.remove(client_token)
+    pub fn remove(&mut self, room_id: &str) -> Option<Room> {
+        self.rooms.remove(room_id)
     }
 }

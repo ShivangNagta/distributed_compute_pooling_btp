@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 type RoomTokens = {
+  roomID: string
   clientToken: string
   roomToken: string
 }
@@ -32,18 +33,19 @@ function ClientPage() {
 
       const body = await response.text()
       const values = new URLSearchParams(body)
+      const roomID = values.get('room_id')
       const clientToken = values.get('client_token')
       const roomToken = values.get('room_token')
 
-      if (!clientToken || !roomToken) {
+      if (!roomID || !clientToken || !roomToken) {
         throw new Error('Coordinator returned an invalid room response')
       }
 
-      setTokens({ clientToken, roomToken })
+      setTokens({ roomID, clientToken, roomToken })
       setStatus('Connecting to room...')
 
       const socket = new WebSocket(
-        `ws://localhost:3000/ws/${encodeURIComponent(clientToken)}`,
+        `ws://localhost:3000/ws/${encodeURIComponent(roomID)}/${encodeURIComponent(clientToken)}`,
       )
       socketRef.current = socket
       socket.onopen = () => setStatus('Room created successfully.')
@@ -77,6 +79,7 @@ function ClientPage() {
 
         {tokens && (
           <div className="mt-4 space-y-2 border border-slate-200 p-3 text-sm text-slate-700">
+            <p>Room ID: {tokens.roomID}</p>
             <p>Client token: {tokens.clientToken}</p>
             <p>Room token: {tokens.roomToken}</p>
           </div>

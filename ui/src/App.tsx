@@ -1,103 +1,106 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+﻿import { useEffect, useState } from 'react'
 import ClientPage from './pages/ClientPage'
+import WorkerPage from './pages/WorkerPage'
 
-function HomePage() {
-  const [message, setMessage] = useState("")
-  const wsRef = useRef< WebSocket | null>(null);
-
-  // https://jasonwatmore.com/post/2020/02/01/react-fetch-http-post-request-examples
-  // useEffect(() => {
-
-  //   // const requestOptions = {
-  //   //   method: 'POST',
-  //   //   headers: { 'Content-Type': 'application/json' },
-  //   //   body: JSON.stringify({ title: 'React Hooks POST Request Example' })
-  //   // };
-
-  //   const requestOptions = {
-  //     method: 'GET',
-  //   };
-  //   fetch('http://localhost:3000/', requestOptions)
-  //     .then(response => response.text())
-  //     .then(data => setMessage(data));
-
-  // }, []);
-
-  async function getHardwareInfo() {
-    let gpuInfo = null;
-    if (navigator.gpu) {
-      try {
-        const adapter = await navigator.gpu.requestAdapter();
-        if (adapter && adapter.info) {
-          gpuInfo = {
-            vendor: adapter.info.vendor,
-            architecture: adapter.info.architecture,
-            device: adapter.info.device,
-            description: adapter.info.description
-          };
-        }
-      } catch (e) {
-        console.warn("WebGPU not accessible", e);
-      }
-    }
-
-    const payload = {
-      cores: navigator.hardwareConcurrency || null,
-      memoryGB: (navigator as any).deviceMemory || null,
-      platform: navigator.platform || null,
-      userAgent: navigator.userAgent || null,
-      gpu: gpuInfo,
-    };
-    console.log("paylod", payload)
-    return JSON.stringify(payload)
-
-  }
-
-  // https://websocket.org/guides/frameworks/react/
-  useEffect(() => {
-    const socket = new WebSocket(
-      `ws://localhost:3000/ws/join_room/${encodeURIComponent("please-fill")}/${encodeURIComponent("please-fill")}`
-    );
-    wsRef.current = socket;
-    console.log("connected")
-
-    socket.onmessage = (event) => {
-      setMessage(event.data);
-    };
-
-    socket.onerror = (err) => {
-      console.error("WebSocket error:", err);
-    };
-
-    return () => {
-      socket.close(1000, "component unmounted");
-    };
-  }, []);
-
-  const sendCapabilities = useCallback(async () => {
-    let data = await getHardwareInfo()
-    console.log(data)
-    wsRef.current?.send(JSON.stringify(data));
-  }, []);
-
+function HomePage({ onSelectMode }: { onSelectMode: (mode: 'client' | 'worker') => void }) {
   return (
-    <>
-      <div>
-        <button onClick={() => sendCapabilities()}>
-          Join Room
-        </button>
-      </div>
-      <div className='text-2xl'>
-        {message}
-      </div>
-    </>
+    <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-8 text-slate-800">
+      <section className="w-full max-w-4xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <p className="text-sm font-medium uppercase tracking-[0.22em] text-slate-500">Distributed compute pooling</p>
+        <h1 className="mt-3 text-4xl font-semibold text-slate-900">Choose your operating mode</h1>
+        <p className="mt-3 max-w-2xl text-base text-slate-600">
+          Clients create rooms and monitor connected workers. Workers join by room ID and room token, then share their available resources.
+        </p>
+
+        <div className="mt-8 grid gap-4 md:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => onSelectMode('client')}
+            className="group rounded-2xl border border-slate-200 bg-slate-900 p-6 text-left text-white transition hover:-translate-y-0.5 hover:border-slate-700 hover:bg-slate-800"
+          >
+            <div className="text-sm font-medium uppercase tracking-[0.2em] text-slate-300">Client mode</div>
+            <div className="mt-4 text-2xl font-semibold">Create rooms</div>
+            <div className="mt-2 text-sm text-slate-300">
+              Generate a room, share a token, and monitor the workers connected to that room.
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onSelectMode('worker')}
+            className="group rounded-2xl border border-slate-200 bg-white p-6 text-left text-slate-900 transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50"
+          >
+            <div className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Worker mode</div>
+            <div className="mt-4 text-2xl font-semibold">Join a room</div>
+            <div className="mt-2 text-sm text-slate-600">
+              Connect using the room reference, then share CPU, memory, and GPU information with the client.
+            </div>
+          </button>
+        </div>
+      </section>
+    </main>
   )
 }
 
 function App() {
-  return window.location.pathname === '/client' ? <ClientPage /> : <HomePage />
+  const [mode, setMode] = useState<'home' | 'client' | 'worker'>(() => {
+    const path = window.location.pathname
+    if (path === '/client') {
+      return 'client'
+    }
+    if (path === '/worker') {
+      return 'worker'
+    }
+    return 'home'
+  })
+
+  useEffect(() => {
+    const onPopState = () => {
+      const path = window.location.pathname
+      if (path === '/client') {
+        setMode('client')
+        return
+      }
+      if (path === '/worker') {
+        setMode('worker')
+        return
+      }
+      setMode('home')
+    }
+
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
+  const onSelectMode = (nextMode: 'client' | 'worker') => {
+    const path = nextMode === 'client' ? '/client' : '/worker'
+    window.history.pushState({}, '', path)
+    setMode(nextMode)
+  }
+
+  if (mode === 'client') {
+    return (
+      <ClientPage
+        onBack={() => {
+          window.history.pushState({}, '', '/')
+          setMode('home')
+        }}
+      />
+    )
+  }
+
+  if (mode === 'worker') {
+    return (
+      <WorkerPage
+        onBack={() => {
+          window.history.pushState({}, '', '/')
+          setMode('home')
+        }}
+      />
+    )
+  }
+
+  return <HomePage onSelectMode={onSelectMode} />
 }
 
 export default App
-
-

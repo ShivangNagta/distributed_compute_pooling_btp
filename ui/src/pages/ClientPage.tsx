@@ -1,4 +1,5 @@
 ﻿import { useEffect, useRef, useState } from 'react'
+import { v4 as uuidv4 } from 'uuid';
 
 type RoomRecord = {
   id: string
@@ -92,12 +93,16 @@ function ClientPage({ onBack }: { onBack: () => void }) {
         return
       }
 
-      const workerId =
-        typeof payload.workerId === 'string'
-          ? payload.workerId
-          : typeof payload.name === 'string'
-            ? payload.name
-            : `Worker ${room.workers.length + 1}`
+      // const workerId =
+      //   typeof payload.workerId === 'string'
+      //     ? payload.workerId
+      //     : typeof payload.name === 'string'
+      //       ? payload.name
+      //       : `Worker ${room.workers.length + 1}`
+            
+
+      const workerId = uuidv4()
+      console.log(workerId)
 
       const workerMetrics: WorkerResource = {
         id: workerId,

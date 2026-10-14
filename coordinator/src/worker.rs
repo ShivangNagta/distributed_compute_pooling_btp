@@ -56,7 +56,7 @@ async fn handle_socket(socket: WebSocket, state: SharedAppState, room_token: Str
     // add this channel to the connections map
     {
         let mut app = state.lock().await;
-        app.worker_conn.connections.insert(room_token.clone(), tx);
+        app.worker_conn.connections.insert(Uuid::new_v4().to_string(), tx);
         println!("Sending channel of worker with room_token {} added to the worker connections map ", room_token.clone());
     }
 

@@ -70,7 +70,7 @@ function ClientPage({ onBack }: { onBack: () => void }) {
     }
 
     const socket = new WebSocket(
-      `ws://localhost:3000/ws/${encodeURIComponent(room.id)}/${encodeURIComponent(room.clientToken)}`,
+      `wss://distributed-compute-pooling.onrender.com/ws/${encodeURIComponent(room.id)}/${encodeURIComponent(room.clientToken)}`,
     )
     socketByRoom.current[room.id] = socket
 
@@ -128,7 +128,7 @@ function ClientPage({ onBack }: { onBack: () => void }) {
     setStatus('Creating room...')
 
     try {
-      const response = await fetch('http://localhost:3000/create_room', {
+      const response = await fetch('https://distributed-compute-pooling.onrender.com/create_room', {
         method: 'POST',
       })
 

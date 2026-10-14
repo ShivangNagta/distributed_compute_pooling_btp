@@ -63,7 +63,7 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
         throw new Error('Both room ID and room token are required.')
       }
 
-      const wsUrl = `ws://localhost:3000/ws/join_room/${encodeURIComponent(roomId)}/${encodeURIComponent(roomToken)}`
+      const wsUrl = `wss://distributed-compute-pooling.onrender.com/ws/join_room/${encodeURIComponent(roomId)}/${encodeURIComponent(roomToken)}`
 
       const socket = new WebSocket(wsUrl)
       socketRef.current = socket

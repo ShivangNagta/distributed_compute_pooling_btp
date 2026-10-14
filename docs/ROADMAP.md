@@ -47,16 +47,16 @@ Connect multiple browsers and continuously observe their available resources.
 
 ### Worker connection
 
-* [ ] Create coordinator/server
-* [ ] Browser can connect as a worker
+* [x] Create coordinator/server
+* [x] Browser can connect as a worker
 * [ ] Maintain list of active workers
 
 ### Resource information
 
-* [ ] Collect CPU information
-* [ ] Collect memory information
+* [x] Collect CPU information
+* [x] Collect memory information
 * [ ] Detect WebGPU availability
-* [ ] Collect basic GPU information
+* [x] Collect basic GPU information
 * [ ] Send resource information periodically
 * [ ] Update resource information dynamically
 

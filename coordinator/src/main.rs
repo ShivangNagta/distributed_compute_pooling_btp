@@ -2,6 +2,7 @@ mod client;
 mod room;
 mod app_state;
 mod worker;
+mod common;
 
 use axum::{http::{header::{AUTHORIZATION, CONTENT_TYPE}}, routing::get , Router};
 use tower_http::cors::{Any, CorsLayer};

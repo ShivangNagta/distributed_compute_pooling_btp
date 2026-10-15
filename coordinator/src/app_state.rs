@@ -1,4 +1,5 @@
 use crate::room::RoomTable;
+use crate::worker::WorkerTable;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex;
 use tokio::sync::mpsc;
@@ -16,6 +17,7 @@ pub struct AppState {
     pub room_table: RoomTable, // for create_room_handler
     pub client_conn: ClientConn,
     pub worker_conn: WorkerConn,
+    pub worker_table: WorkerTable, // temp
 }
 
 // Constructor of AppState
@@ -25,6 +27,7 @@ impl AppState {
             room_table: RoomTable::new(),
             client_conn: ClientConn::new(),
             worker_conn: WorkerConn::new(),
+            worker_table: WorkerTable::new(),
         }
     }
 }

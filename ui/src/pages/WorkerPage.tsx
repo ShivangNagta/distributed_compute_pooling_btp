@@ -1,3 +1,4 @@
+
 import { useRef, useState } from 'react'
 
 type JoinedRoom = {
@@ -36,9 +37,9 @@ async function getCapabilities(): Promise<Record<string, unknown>> {
 
   return {
     cores: navigator.hardwareConcurrency || null,
-    memoryGB: (navigator as { deviceMemory?: number }).deviceMemory || null,
+    memory_gb: (navigator as { deviceMemory?: number }).deviceMemory || null,
     platform: navigator.platform || null,
-    userAgent: navigator.userAgent || null,
+    user_agent: navigator.userAgent || null,
     gpu: gpuInfo,
   }
 }
@@ -70,7 +71,12 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
 
       socket.onopen = async () => {
         const capabilities = await getCapabilities()
-        socket.send(JSON.stringify(capabilities))
+        const to_send = {
+          "message_type": "capability",
+          "metadata": capabilities,
+          "user_id": ""
+        }
+        socket.send(JSON.stringify(to_send))
         setJoinedRooms((currentRooms) => {
           const existing = currentRooms.find((room) => room.roomId === roomId && room.roomToken === roomToken)
           if (existing) {

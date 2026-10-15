@@ -16,7 +16,7 @@ function HomePage({ onSelectMode }: { onSelectMode: (mode: 'client' | 'worker') 
           <button
             type="button"
             onClick={() => onSelectMode('client')}
-            className="group rounded-2xl border border-slate-200 bg-slate-900 p-6 text-left text-white transition hover:-translate-y-0.5 hover:border-slate-700 hover:bg-slate-800"
+          className="group rounded-2xl border border-slate-200 bg-slate-900 p-6 text-left text-white transition hover:-translate-y-0.5 hover:border-slate-700 hover:bg-slate-800"
           >
             <div className="text-sm font-medium uppercase tracking-[0.2em] text-slate-300">Client mode</div>
             <div className="mt-4 text-2xl font-semibold">Create rooms</div>

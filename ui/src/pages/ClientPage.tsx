@@ -93,17 +93,21 @@ function ClientPage({ onBack }: { onBack: () => void }) {
       }
 
       const workerId =
-        typeof payload.workerId === 'string'
-          ? payload.workerId
+        typeof payload.user_id === 'string'
+          ? payload.user_id
           : typeof payload.name === 'string'
             ? payload.name
             : `Worker ${room.workers.length + 1}`
 
+      const emptyRecord: Record<string, unknown> = {};
+      const capability = payload.metadata && typeof payload.metadata === 'object' ? payload.metadata as Record<string, unknown> : emptyRecord
+      console.log(payload)
+      console.log(capability)
       const workerMetrics: WorkerResource = {
         id: workerId,
         status: 'online',
         lastSeen: new Date().toISOString(),
-        resources: payload,
+        resources: capability,
       }
 
       setRooms((currentRooms) =>

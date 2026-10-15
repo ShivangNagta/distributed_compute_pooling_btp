@@ -1,7 +1,9 @@
 
+use core::str;
+use std::collections::HashMap;
 use uuid::Uuid;
 use axum::{
-    extract::{Path, State, ws::{WebSocketUpgrade, WebSocket, Message}},
+    extract::{Path, State, ws::{WebSocketUpgrade, WebSocket, Message}, Json},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -9,6 +11,9 @@ use tokio::sync::mpsc;
 use futures_util::{SinkExt, StreamExt};
 use super::room::{RoomStatus, Room};
 use crate::app_state::{SharedAppState, BUFFER_SIZE};
+use crate::common::SocketMessage;
+use serde::{Deserialize, Serialize};
+
 
 pub async fn ws_worker_handler(
     State(state): State<SharedAppState>,
@@ -52,11 +57,11 @@ async fn handle_socket(socket: WebSocket, state: SharedAppState, room_token: Str
 
     // Create mpsc Channel for this connection
     let (tx, mut rx) = mpsc::channel::<Message>(BUFFER_SIZE);
-
+    let worker_id = Uuid::new_v4();
     // add this channel to the connections map
     {
         let mut app = state.lock().await;
-        app.worker_conn.connections.insert(room_token.clone(), tx);
+        app.worker_conn.connections.insert(worker_id.to_string(), tx);
         println!("Sending channel of worker with room_token {} added to the worker connections map ", room_token.clone());
     }
 
@@ -87,7 +92,30 @@ async fn handle_socket(socket: WebSocket, state: SharedAppState, room_token: Str
         };
 
         if let Some(client_tx_channel) = client_tx_channel {
-            if client_tx_channel.send(msg).await.is_err() {
+
+
+            // https://docs.rs/axum/latest/axum/struct.Json.html
+            // https://github.com/serde-rs/json
+
+            println!("[Worker] sent {:?}", msg);
+            let s = Json(&msg).to_text().unwrap();
+            println!("[Worker] parsed {:?}", s);
+            let mut p: SocketMessage = serde_json::from_str(&s).unwrap();
+            let cap: Capability = p.metadata.clone();
+            println!("[Worker] parsed message {:?}", p);
+
+            if p.message_type == "capability" {
+                let new_worker = Worker {
+                    worker_id: worker_id,
+                    capabilites: cap
+                };
+                p.user_id = worker_id.to_string();
+                let mut app = state.lock().await;
+                app.worker_table.insert(worker_id, new_worker);
+                println!("New worker with worker id: {} added to the worker table", worker_id.clone());
+            }
+            let json_str = serde_json::to_string(&p).unwrap();
+            if client_tx_channel.send(Message::Text(json_str.into())).await.is_err() {
                 break;
             }
         }
@@ -99,6 +127,7 @@ async fn handle_socket(socket: WebSocket, state: SharedAppState, room_token: Str
     let _ = writer.await;
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GpuInformation {
     vendor: String,
     architecture: String,
@@ -106,9 +135,10 @@ pub struct GpuInformation {
     description: String,
 }
 
-pub struct Capabilities {
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Capability {
     pub cores: i32,
-    pub memory_gb: f32,
+    pub memory_gb: i32,
     pub platform: String,
     pub user_agent: String,
     pub gpu: GpuInformation,
@@ -116,22 +146,22 @@ pub struct Capabilities {
 
 pub struct Worker {
     pub worker_id: Uuid,
-    pub capabilites: Capabilities,
+    pub capabilites: Capability,
 }
 
-// pub struct WorkerTable {
-//     pub workers: HashMap<String, Worker>,
-// }
+pub struct WorkerTable {
+    pub workers: HashMap<String, Worker>,
+}
 
-// impl WorkerTable {
-//     pub fn new() -> Self {
-//         Self {
-//             workers: HashMap::new(),
-//         }
-//     }
+impl WorkerTable {
+    pub fn new() -> Self {
+        Self {
+            workers: HashMap::new(),
+        }
+    }
 
-//     pub fn insert(&mut self, worker_id: Uuid, worker: Worker) {
-//         self.rooms.insert(client_token, room);
-//     }
-// }
+    pub fn insert(&mut self, worker_id: Uuid, worker: Worker) {
+        self.workers.insert(worker_id.to_string(), worker);
+    }
+}
 

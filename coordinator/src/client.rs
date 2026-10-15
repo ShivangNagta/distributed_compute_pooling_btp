@@ -1,7 +1,8 @@
 use uuid::Uuid;
 use crate::room::{RoomTable};
+use crate::common::SocketMessage;
 use axum::{
-    extract::{Path, State, ws::{WebSocketUpgrade, WebSocket, Message}},
+    extract::{Path, State, ws::{WebSocketUpgrade, WebSocket, Message}, Json},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -66,9 +67,9 @@ async fn handle_socket(socket: WebSocket, state: SharedAppState, client_token: S
         async move {
             while let Some(msg) = rx.recv().await {
                 println!("[Client] received {:?}", msg);
-
-                // send updates/ jobs to the workers ...
-
+                let s = Json(&msg).to_text().unwrap();
+                let p: SocketMessage = serde_json::from_str(&s).unwrap();
+                println!("[Client] parsed message {:?}", p);
                 if ws_sender.send(msg).await.is_err() {
                     break;
                 }

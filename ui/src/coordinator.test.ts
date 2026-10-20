@@ -3,11 +3,14 @@ import { describe, expect, it } from 'vitest'
 import { parseMessage } from './coordinator'
 
 describe('parseMessage', () => {
-  it('parses a capabilities message', () => {
-    const raw = JSON.stringify({ type: 'capabilities', payload: { cores: 8 } })
+  it('parses a worker_joined message', () => {
+    const raw = JSON.stringify({
+      type: 'worker_joined',
+      payload: { id: 'w-1', capabilities: { cores: 8 } },
+    })
     const message = parseMessage(raw)
 
-    expect(message?.type).toBe('capabilities')
+    expect(message?.type).toBe('worker_joined')
   })
 
   it('parses a worker_left message', () => {

@@ -1,34 +1,31 @@
-mod client;
-mod room;
+mod api;
 mod app_state;
-mod worker;
-mod common;
+mod contracts;
+mod error;
+mod repository;
+mod service;
+mod util;
 
-use axum::{http::{header::{AUTHORIZATION, CONTENT_TYPE}}, routing::get , Router};
-use tower_http::cors::{Any, CorsLayer};
-use client::{create_room_handler,};
-use app_state::{create_shared_state, SharedAppState};
-
-// CORS: https://medium.com/@mikecode/axum-28-cors-596e311fc6cc
-// http://docs.rs/tower-http/latest/tower_http/cors/index.html
+use app_state::AppState;
+use repository::Repository;
 
 #[tokio::main]
 async fn main() {
-    let app = app(create_shared_state());
+    let database_path =
+        std::env::var("DATABASE_PATH").unwrap_or_else(|_| "data/coordinator.db".to_string());
+    if let Some(parent) = std::path::Path::new(&database_path).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let database_url = format!("sqlite://{}?mode=rwc", database_path);
+
+    let repo = Repository::open(&database_url)
+        .await
+        .expect("failed to open database");
+    repo.migrate().await.expect("failed to run migrations");
+
+    let state = AppState::new(repo);
+    let app = api::router(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-
     axum::serve(listener, app).await.unwrap();
-}
-
-fn app(state: SharedAppState) -> Router {
-    let cors_layer = CorsLayer::new().allow_methods(Any).allow_origin(Any).allow_headers([AUTHORIZATION, CONTENT_TYPE]);
-
-    Router::new()
-        .route("/", get(|| async{"hello from coordinator"}))
-        .route("/create_room", axum::routing::post(create_room_handler))
-        .route("/ws/{room_id}/{client_token}", axum::routing::any(client::ws_handler))
-        .route("/ws/join_room/{room_id}/{room_token}", axum::routing::any(worker::ws_worker_handler))
-        .with_state(state)
-        .layer(cors_layer)
 }

@@ -1,28 +1,21 @@
-
 import { useRef, useState } from 'react'
+import { coordinatorWsUrl } from '../coordinator'
+import type { Capabilities } from '../types'
 
 type JoinedRoom = {
   roomId: string
   roomToken: string
-  status: 'connecting' | 'connected' | 'error'
-  resources: Record<string, unknown>
+  status: 'connecting' | 'connected' | 'disconnected' | 'error'
+  capabilities: Capabilities | null
 }
 
-function normalizeResourcePayload(payload: unknown): Record<string, unknown> {
-  if (payload && typeof payload === 'object') {
-    return payload as Record<string, unknown>
-  }
-
-  return {}
-}
-
-async function getCapabilities(): Promise<Record<string, unknown>> {
-  let gpuInfo: Record<string, unknown> | null = null
+async function getCapabilities(): Promise<Capabilities> {
+  let gpuInfo: Capabilities['gpu'] = null
 
   if (navigator.gpu) {
     try {
       const adapter = await navigator.gpu.requestAdapter()
-      if (adapter && adapter.info) {
+      if (adapter?.info) {
         gpuInfo = {
           vendor: adapter.info.vendor,
           architecture: adapter.info.architecture,
@@ -42,6 +35,20 @@ async function getCapabilities(): Promise<Record<string, unknown>> {
     user_agent: navigator.userAgent || null,
     gpu: gpuInfo,
   }
+}
+
+function upsertRoom(
+  rooms: JoinedRoom[],
+  roomId: string,
+  roomToken: string,
+  status: JoinedRoom['status'],
+  capabilities: Capabilities | null,
+): JoinedRoom[] {
+  return rooms.map((room) =>
+    room.roomId === roomId && room.roomToken === roomToken
+      ? { ...room, status, capabilities }
+      : room,
+  )
 }
 
 function WorkerPage({ onBack }: { onBack: () => void }) {
@@ -64,56 +71,32 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
         throw new Error('Both room ID and room token are required.')
       }
 
-      const wsUrl = `ws://localhost:3000/ws/join_room/${encodeURIComponent(roomId)}/${encodeURIComponent(roomToken)}`
-
-      const socket = new WebSocket(wsUrl)
+      const socket = new WebSocket(
+        coordinatorWsUrl(
+          `/ws/join_room/${encodeURIComponent(roomId)}/${encodeURIComponent(roomToken)}`,
+        ),
+      )
       socketRef.current = socket
 
       socket.onopen = async () => {
         const capabilities = await getCapabilities()
-        const to_send = {
-          "message_type": "capability",
-          "metadata": capabilities,
-          "user_id": ""
-        }
-        socket.send(JSON.stringify(to_send))
-        setJoinedRooms((currentRooms) => {
-          const existing = currentRooms.find((room) => room.roomId === roomId && room.roomToken === roomToken)
-          if (existing) {
-            return currentRooms.map((room) =>
-              room.roomId === roomId && room.roomToken === roomToken
-                ? { ...room, status: 'connected', resources: capabilities }
-                : room,
-            )
-          }
-
-          return [
-            {
-              roomId,
-              roomToken,
-              status: 'connected',
-              resources: capabilities,
-            },
-            ...currentRooms,
-          ]
-        })
+        socket.send(JSON.stringify({ type: 'capabilities', payload: capabilities }))
+        setJoinedRooms((current) =>
+          upsertRoom(current, roomId, roomToken, 'connected', capabilities),
+        )
         setStatus(`Connected to room ${roomId}. Your resources are now visible to the client.`)
       }
 
       socket.onerror = () => {
         setStatus('Could not connect to that room. Check the room ID and room token and try again.')
-        setJoinedRooms((currentRooms) =>
-          currentRooms.map((room) =>
-            room.roomId === roomId && room.roomToken === roomToken ? { ...room, status: 'error' } : room,
-          ),
-        )
+        setJoinedRooms((current) => upsertRoom(current, roomId, roomToken, 'error', null))
       }
 
       socket.onclose = () => {
-        setJoinedRooms((currentRooms) =>
-          currentRooms.map((room) =>
+        setJoinedRooms((current) =>
+          current.map((room) =>
             room.roomId === roomId && room.roomToken === roomToken
-              ? { ...room, status: room.status === 'error' ? 'error' : 'connected' }
+              ? { ...room, status: room.status === 'error' ? 'error' : 'disconnected' }
               : room,
           ),
         )
@@ -187,51 +170,55 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
               </div>
             ) : (
               <div className="mt-5 space-y-4">
-                {joinedRooms.map((room) => (
-                  <div key={`${room.roomId}-${room.roomToken}`} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Room</p>
-                        <h3 className="mt-1 text-base font-semibold text-slate-900">{room.roomId}</h3>
+                {joinedRooms.map((room) => {
+                  const caps = room.capabilities
+                  return (
+                    <div key={`${room.roomId}-${room.roomToken}`} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Room</p>
+                          <h3 className="mt-1 text-base font-semibold text-slate-900">{room.roomId}</h3>
+                        </div>
+                        <span
+                          className={`rounded-full px-2 py-1 text-xs font-medium ${
+                            room.status === 'connected'
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : room.status === 'error'
+                                ? 'bg-rose-100 text-rose-700'
+                                : 'bg-amber-100 text-amber-700'
+                          }`}
+                        >
+                          {room.status}
+                        </span>
                       </div>
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs font-medium ${
-                          room.status === 'connected'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : room.status === 'error'
-                              ? 'bg-rose-100 text-rose-700'
-                              : 'bg-amber-100 text-amber-700'
-                        }`}
-                      >
-                        {room.status}
-                      </span>
-                    </div>
 
-                    <dl className="mt-4 space-y-2 text-sm text-slate-600">
-                      <div className="flex items-center justify-between gap-3">
-                        <dt>Room token</dt>
-                        <dd className="font-medium text-slate-900">{room.roomToken}</dd>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <dt>CPU cores</dt>
-                        <dd className="font-medium text-slate-900">{String(normalizeResourcePayload(room.resources).cores ?? 'N/A')}</dd>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <dt>Memory</dt>
-                        <dd className="font-medium text-slate-900">
-                          {(() => {
-                            const memoryGB = normalizeResourcePayload(room.resources).memoryGB
-                            return memoryGB !== null && memoryGB !== undefined ? `${memoryGB} GB` : 'N/A'
-                          })()}
-                        </dd>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <dt>Platform</dt>
-                        <dd className="font-medium text-slate-900">{String(normalizeResourcePayload(room.resources).platform ?? 'N/A')}</dd>
-                      </div>
-                    </dl>
-                  </div>
-                ))}
+                      <dl className="mt-4 space-y-2 text-sm text-slate-600">
+                        <div className="flex items-center justify-between gap-3">
+                          <dt>Room token</dt>
+                          <dd className="font-medium text-slate-900">{room.roomToken}</dd>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <dt>CPU cores</dt>
+                          <dd className="font-medium text-slate-900">
+                            {caps?.cores != null ? caps.cores : 'N/A'}
+                          </dd>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <dt>Memory</dt>
+                          <dd className="font-medium text-slate-900">
+                            {caps?.memory_gb != null ? `${caps.memory_gb} GB` : 'N/A'}
+                          </dd>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <dt>Platform</dt>
+                          <dd className="font-medium text-slate-900">
+                            {caps?.platform != null ? caps.platform : 'N/A'}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>

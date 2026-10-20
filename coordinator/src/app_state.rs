@@ -1,62 +1,31 @@
-use crate::room::RoomTable;
-use crate::worker::WorkerTable;
-use std::{collections::HashMap, sync::Arc};
-use tokio::sync::Mutex;
-use tokio::sync::mpsc;
-use axum::{
-    extract::{ws::{Message}},
-};
+use std::collections::HashMap;
+use std::sync::Arc;
 
-// Sending/Receiving buffer size
+use axum::extract::ws::Message;
+use tokio::sync::{Mutex, mpsc};
+
+use crate::contracts::Worker;
+use crate::repository::Repository;
+
 pub const BUFFER_SIZE: usize = 100;
 
-pub type SharedAppState = Arc<Mutex<AppState>>;
-
-// Shared struct for all clients
+// Durable state lives in Repository (SQLite). Only ephemeral, session-scoped
+// state (live sockets, the worker registry) is held here.
+#[derive(Clone)]
 pub struct AppState {
-    pub room_table: RoomTable, // for create_room_handler
-    pub client_conn: ClientConn,
-    pub worker_conn: WorkerConn,
-    pub worker_table: WorkerTable, // temp
+    pub repo: Repository,
+    pub client_conns: Arc<Mutex<HashMap<String, mpsc::Sender<Message>>>>,
+    pub worker_conns: Arc<Mutex<HashMap<String, mpsc::Sender<Message>>>>,
+    pub workers: Arc<Mutex<HashMap<String, Worker>>>,
 }
 
-// Constructor of AppState
 impl AppState {
-    pub fn new() -> Self {
+    pub fn new(repo: Repository) -> Self {
         Self {
-            room_table: RoomTable::new(),
-            client_conn: ClientConn::new(),
-            worker_conn: WorkerConn::new(),
-            worker_table: WorkerTable::new(),
+            repo,
+            client_conns: Arc::new(Mutex::new(HashMap::new())),
+            worker_conns: Arc::new(Mutex::new(HashMap::new())),
+            workers: Arc::new(Mutex::new(HashMap::new())),
         }
-    }
-}
-
-pub fn create_shared_state() -> SharedAppState {
-    Arc::new(Mutex::new(AppState::new()))
-}
-
-// Map of WS connections
-pub struct ClientConn {
-    // map from client_token to mpsc channel
-    pub connections: HashMap<String, mpsc::Sender<Message>>,
-}
-
-// Constructor of ClientConn
-impl ClientConn {
-    fn new() -> Self {
-        Self { connections: HashMap::new() }
-    }
-}
-
-pub struct WorkerConn {
-    // map from client_token to mpsc channel
-    pub connections: HashMap<String, mpsc::Sender<Message>>,
-}
-
-// Constructor of WorkerConn
-impl WorkerConn {
-    fn new() -> Self {
-        Self { connections: HashMap::new() }
     }
 }

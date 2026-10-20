@@ -1,39 +1,12 @@
 ﻿import { useEffect, useRef, useState } from 'react'
+import { COORDINATOR_URL, coordinatorWsUrl, parseMessage } from '../coordinator'
+import type { Worker } from '../types'
 
 type RoomRecord = {
   id: string
   clientToken: string
   roomToken: string
-  workers: WorkerResource[]
-}
-
-type WorkerResource = {
-  id: string
-  status: 'online' | 'idle'
-  resources: Record<string, unknown>
-  lastSeen: string
-}
-
-function parseWorkerMessage(raw: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(raw)
-    if (parsed && typeof parsed === 'object') {
-      return parsed as Record<string, unknown>
-    }
-  } catch {
-    // The worker may send a JSON string that has already been stringified once.
-  }
-
-  try {
-    const unwrapped = JSON.parse(raw.replace(/^"|"$/g, ''))
-    if (unwrapped && typeof unwrapped === 'object') {
-      return unwrapped as Record<string, unknown>
-    }
-  } catch {
-    // Ignore invalid messages.
-  }
-
-  return null
+  workers: Worker[]
 }
 
 function formatResourceValue(value: unknown) {
@@ -64,13 +37,37 @@ function ClientPage({ onBack }: { onBack: () => void }) {
     }
   }, [])
 
+  const upsertWorker = (roomId: string, worker: Worker) => {
+    setRooms((current) =>
+      current.map((room) => {
+        if (room.id !== roomId) {
+          return room
+        }
+        const workers = room.workers.filter((w) => w.id !== worker.id)
+        return { ...room, workers: [worker, ...workers] }
+      }),
+    )
+  }
+
+  const removeWorker = (roomId: string, workerId: string) => {
+    setRooms((current) =>
+      current.map((room) =>
+        room.id === roomId
+          ? { ...room, workers: room.workers.filter((w) => w.id !== workerId) }
+          : room,
+      ),
+    )
+  }
+
   const connectClientSocket = (room: RoomRecord) => {
     if (socketByRoom.current[room.id]) {
       return
     }
 
     const socket = new WebSocket(
-      `ws://localhost:3000/ws/${encodeURIComponent(room.id)}/${encodeURIComponent(room.clientToken)}`,
+      coordinatorWsUrl(
+        `/ws/${encodeURIComponent(room.id)}/${encodeURIComponent(room.clientToken)}`,
+      ),
     )
     socketByRoom.current[room.id] = socket
 
@@ -87,42 +84,18 @@ function ClientPage({ onBack }: { onBack: () => void }) {
     }
 
     socket.onmessage = (event) => {
-      const payload = parseWorkerMessage(event.data)
-      if (!payload) {
+      const message = parseMessage(event.data)
+      if (!message) {
         return
       }
 
-      const workerId =
-        typeof payload.user_id === 'string'
-          ? payload.user_id
-          : typeof payload.name === 'string'
-            ? payload.name
-            : `Worker ${room.workers.length + 1}`
-
-      const emptyRecord: Record<string, unknown> = {};
-      const capability = payload.metadata && typeof payload.metadata === 'object' ? payload.metadata as Record<string, unknown> : emptyRecord
-      console.log(payload)
-      console.log(capability)
-      const workerMetrics: WorkerResource = {
-        id: workerId,
-        status: 'online',
-        lastSeen: new Date().toISOString(),
-        resources: capability,
+      if (message.type === 'worker_joined') {
+        upsertWorker(room.id, message.payload)
+        setStatus(`Worker ${message.payload.id} joined.`)
+      } else if (message.type === 'worker_left') {
+        removeWorker(room.id, message.payload.worker_id)
+        setStatus(`Worker ${message.payload.worker_id} left.`)
       }
-
-      setRooms((currentRooms) =>
-        currentRooms.map((currentRoom) => {
-          if (currentRoom.id !== room.id) {
-            return currentRoom
-          }
-
-          const nextWorkers = currentRoom.workers.filter((worker) => worker.id !== workerId)
-          return {
-            ...currentRoom,
-            workers: [workerMetrics, ...nextWorkers],
-          }
-        }),
-      )
     }
   }
 
@@ -132,7 +105,7 @@ function ClientPage({ onBack }: { onBack: () => void }) {
     setStatus('Creating room...')
 
     try {
-      const response = await fetch('http://localhost:3000/create_room', {
+      const response = await fetch(`${COORDINATOR_URL}/create_room`, {
         method: 'POST',
       })
 
@@ -140,11 +113,14 @@ function ClientPage({ onBack }: { onBack: () => void }) {
         throw new Error(`Room creation failed (${response.status})`)
       }
 
-      const body = await response.text()
-      const params = new URLSearchParams(body)
-      const roomId = params.get('room_id')
-      const clientToken = params.get('client_token')
-      const roomToken = params.get('room_token')
+      const body = (await response.json()) as {
+        room_id?: string
+        client_token?: string
+        worker_token?: string
+      }
+      const roomId = body.room_id
+      const clientToken = body.client_token
+      const roomToken = body.worker_token
 
       if (!roomId || !clientToken || !roomToken) {
         throw new Error('Coordinator returned an invalid room response.')
@@ -157,19 +133,15 @@ function ClientPage({ onBack }: { onBack: () => void }) {
         workers: [],
       }
 
-      setRooms((currentRooms) => {
-        const existing = currentRooms.find((room) => room.id === roomId)
-        if (existing) {
-          return currentRooms
-        }
-
-        return [nextRoom, ...currentRooms]
-      })
+      setRooms((current) =>
+        current.some((room) => room.id === roomId) ? current : [nextRoom, ...current],
+      )
       setActiveRoomId(roomId)
       connectClientSocket(nextRoom)
       setStatus(`Room ${roomId} created successfully.`)
     } catch (requestError) {
-      const message = requestError instanceof Error ? requestError.message : 'Unable to create room.'
+      const message =
+        requestError instanceof Error ? requestError.message : 'Unable to create room.'
       setError(message)
       setStatus(message)
     } finally {
@@ -294,8 +266,8 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                   ) : (
                     <div className="grid gap-4 md:grid-cols-2">
                       {activeRoom.workers.map((worker) => {
-                        const resources = worker.resources
-                        const gpuInfo = resources.gpu && typeof resources.gpu === 'object' ? resources.gpu as Record<string, unknown> : null
+                        const caps = worker.capabilities
+                        const gpu = caps.gpu
 
                         return (
                           <div key={`${activeRoom.id}-${worker.id}`} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -309,21 +281,23 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                             <dl className="mt-4 space-y-2 text-sm text-slate-600">
                               <div className="flex items-center justify-between gap-3">
                                 <dt>CPU cores</dt>
-                                <dd className="font-medium text-slate-900">{formatResourceValue(resources.cores)}</dd>
+                                <dd className="font-medium text-slate-900">{formatResourceValue(caps.cores)}</dd>
                               </div>
                               <div className="flex items-center justify-between gap-3">
                                 <dt>Memory</dt>
-                                <dd className="font-medium text-slate-900">{formatResourceValue(resources.memoryGB)} GB</dd>
+                                <dd className="font-medium text-slate-900">
+                                  {formatResourceValue(caps.memory_gb)} GB
+                                </dd>
                               </div>
                               <div className="flex items-center justify-between gap-3">
                                 <dt>Platform</dt>
-                                <dd className="font-medium text-slate-900">{formatResourceValue(resources.platform)}</dd>
+                                <dd className="font-medium text-slate-900">{formatResourceValue(caps.platform)}</dd>
                               </div>
-                              {gpuInfo ? (
+                              {gpu ? (
                                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
                                   <p className="font-medium text-slate-800">GPU</p>
-                                  <p className="mt-1">{formatResourceValue(gpuInfo.vendor)}</p>
-                                  <p>{formatResourceValue(gpuInfo.device)}</p>
+                                  <p className="mt-1">{formatResourceValue(gpu.vendor)}</p>
+                                  <p>{formatResourceValue(gpu.device)}</p>
                                 </div>
                               ) : null}
                             </dl>

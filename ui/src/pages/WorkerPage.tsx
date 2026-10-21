@@ -3,10 +3,23 @@ import { CapabilityList } from '../components/CapabilityList'
 import { CopyButton } from '../components/CopyButton'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
-import { coordinatorWsUrl } from '../coordinator'
-import { statusTone } from '../lib/status'
+import { coordinatorWsUrl, parseMessage } from '../coordinator'
+import { runWasmTask } from '../lib/wasm'
+import { statusTone, taskStatusTone } from '../lib/status'
 import { loadWorkerRooms, saveWorkerRooms, type StoredJoinedRoom } from '../lib/storage'
-import type { Capabilities } from '../types'
+import type { Artifact, Capabilities, TaskStatus } from '../types'
+
+type WorkerActivity = {
+  taskId: string
+  jobId: string
+  entryPoint: string
+  fileName: string
+  status: TaskStatus
+  input: unknown
+  result: unknown
+  error: string | null
+  executionTimeMs: number | null
+}
 
 async function getCapabilities(): Promise<Capabilities> {
   let gpuInfo: Capabilities['gpu'] = null
@@ -36,6 +49,69 @@ async function getCapabilities(): Promise<Capabilities> {
   }
 }
 
+async function handleWorkerMessage(
+  socket: WebSocket,
+  raw: unknown,
+  artifacts: Map<string, Artifact>,
+  onActivity: (activity: WorkerActivity) => void,
+): Promise<void> {
+  const message = parseMessage(raw)
+  if (!message) return
+
+  if (message.type === 'job_artifact') {
+    artifacts.set(message.payload.job_id, message.payload.artifact)
+    return
+  }
+
+  if (message.type === 'task_assign') {
+    const task = message.payload
+    const artifact = artifacts.get(task.job_id)
+
+    const base: WorkerActivity = {
+      taskId: task.id,
+      jobId: task.job_id,
+      entryPoint: artifact?.entry_point ?? '',
+      fileName: artifact?.files[0]?.name ?? '',
+      status: 'assigned',
+      input: task.input,
+      result: undefined,
+      error: null,
+      executionTimeMs: null,
+    }
+
+    onActivity(base)
+    socket.send(JSON.stringify({ type: 'task_started', payload: { task_id: task.id } }))
+    onActivity({ ...base, status: 'running' })
+
+    try {
+      if (!artifact) throw new Error('artifact not received yet')
+      const outcome = await runWasmTask(artifact, task)
+      socket.send(
+        JSON.stringify({
+          type: 'task_result',
+          payload: {
+            task_id: task.id,
+            result: outcome.result,
+            execution_time_ms: outcome.execution_time_ms,
+          },
+        }),
+      )
+      onActivity({
+        ...base,
+        status: 'completed',
+        result: outcome.result,
+        executionTimeMs: outcome.execution_time_ms,
+      })
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'execution failed'
+      socket.send(
+        JSON.stringify({ type: 'task_failed', payload: { task_id: task.id, error: reason } }),
+      )
+      onActivity({ ...base, status: 'failed', error: reason })
+    }
+  }
+}
+
 function JoinedRoomCard({ room }: { room: StoredJoinedRoom }) {
   return (
     <div className="rounded-md border border-neutral-200 p-3">
@@ -57,13 +133,63 @@ function JoinedRoomCard({ room }: { room: StoredJoinedRoom }) {
   )
 }
 
+function ActivityCard({ activity }: { activity: WorkerActivity }) {
+  return (
+    <div className="rounded-md border border-neutral-200 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium text-neutral-900">
+          Task {activity.taskId.slice(0, 8)}
+        </span>
+        <StatusBadge tone={taskStatusTone(activity.status)}>{activity.status}</StatusBadge>
+      </div>
+
+      <dl className="mt-3 space-y-1.5 text-sm">
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-neutral-500">Job</dt>
+          <dd className="mono truncate text-neutral-900">{activity.jobId}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-neutral-500">Module</dt>
+          <dd className="mono truncate text-neutral-900">
+            {activity.fileName || '—'} · {activity.entryPoint || '—'}
+          </dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-neutral-500">Input</dt>
+          <dd className="mono text-neutral-900">{JSON.stringify(activity.input)}</dd>
+        </div>
+        {activity.status === 'completed' && (
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-neutral-500">Result</dt>
+            <dd className="mono text-neutral-900">{JSON.stringify(activity.result)}</dd>
+          </div>
+        )}
+        {activity.error && (
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-neutral-500">Error</dt>
+            <dd className="text-red-600">{activity.error}</dd>
+          </div>
+        )}
+        {activity.executionTimeMs != null && (
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-neutral-500">Time</dt>
+            <dd className="text-neutral-900">{activity.executionTimeMs} ms</dd>
+          </div>
+        )}
+      </dl>
+    </div>
+  )
+}
+
 function WorkerPage({ onBack }: { onBack: () => void }) {
   const socketRef = useRef<WebSocket | null>(null)
+  const artifactsRef = useRef<Map<string, Artifact>>(new Map())
   const [roomIdInput, setRoomIdInput] = useState('')
   const [roomTokenInput, setRoomTokenInput] = useState('')
   const [joinedRooms, setJoinedRooms] = useState<StoredJoinedRoom[]>(() => loadWorkerRooms())
   const [status, setStatus] = useState('Join a room to start contributing resources.')
   const [isJoining, setIsJoining] = useState(false)
+  const [activities, setActivities] = useState<WorkerActivity[]>([])
 
   useEffect(() => {
     saveWorkerRooms(joinedRooms)
@@ -108,6 +234,15 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
           upsertRoom(current, roomId, roomToken, 'connected', capabilities),
         )
         setStatus(`Connected to room ${roomId}. Your resources are now visible to the client.`)
+      }
+
+      socket.onmessage = (event) => {
+        void handleWorkerMessage(socket, event.data, artifactsRef.current, (activity) => {
+          setActivities((current) => [
+            activity,
+            ...current.filter((item) => item.taskId !== activity.taskId),
+          ])
+        })
       }
 
       socket.onerror = () => {
@@ -200,6 +335,25 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
             )}
           </section>
         </div>
+
+        <section className="card mt-6 p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Job activity</h2>
+            <span className="text-xs text-neutral-500">{activities.length}</span>
+          </div>
+
+          {activities.length === 0 ? (
+            <p className="text-sm text-neutral-500">
+              No jobs yet. Assigned tasks appear here with what was received and the result.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {activities.map((activity) => (
+                <ActivityCard key={activity.taskId} activity={activity} />
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </main>
   )

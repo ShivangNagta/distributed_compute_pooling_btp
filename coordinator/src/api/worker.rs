@@ -81,7 +81,7 @@ async fn handle_socket(
             Err(_) => continue,
         };
         for event in events {
-            send_to_client(&state, &client_token, &event).await;
+            service::send_to_client(&state, &client_token, &event).await;
         }
     }
 
@@ -90,20 +90,8 @@ async fn handle_socket(
         .await
         .unwrap_or_default();
     for event in events {
-        send_to_client(&state, &client_token, &event).await;
+        service::send_to_client(&state, &client_token, &event).await;
     }
 
     let _ = writer.await;
-}
-
-async fn send_to_client(state: &AppState, client_token: &str, event: &Message) {
-    let tx = {
-        let conns = state.client_conns.lock().await;
-        conns.get(client_token).cloned()
-    };
-    if let Some(tx) = tx {
-        if let Ok(json) = serde_json::to_string(event) {
-            let _ = tx.send(WsMessage::Text(json.into())).await;
-        }
-    }
 }

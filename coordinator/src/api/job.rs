@@ -1,14 +1,26 @@
 use axum::{
     extract::{Path, State},
-    http::{header::HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
+    http::header::HeaderMap,
     Json,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::app_state::AppState;
-use crate::contracts::{Job, Task};
+use crate::contracts::{Artifact, Job, Task};
 use crate::error::AppError;
+use crate::service::{self, NewTask};
+
+#[derive(Deserialize)]
+pub struct SubmitJobRequest {
+    pub name: String,
+    pub artifact: Artifact,
+    pub tasks: Vec<NewTask>,
+}
+
+#[derive(Serialize)]
+pub struct SubmitJobResponse {
+    pub job_id: String,
+}
 
 /// Recovery path. The happy path is WebSocket events (task_update /
 /// job_update); this lets a client that missed them fetch the current
@@ -27,11 +39,32 @@ fn extract_client_token(headers: &HeaderMap) -> Option<String> {
         .map(str::to_string)
 }
 
-pub async fn submit_handler(State(_state): State<AppState>) -> impl IntoResponse {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(serde_json::json!({ "error": "job submission not implemented" })),
+pub async fn submit_handler(
+    State(state): State<AppState>,
+    Path(room_id): Path<String>,
+    headers: HeaderMap,
+    Json(request): Json<SubmitJobRequest>,
+) -> Result<Json<SubmitJobResponse>, AppError> {
+    let token = extract_client_token(&headers).ok_or(AppError::Unauthorized)?;
+    let room = state
+        .repo
+        .get_room_by_client_token(&token)
+        .await?
+        .ok_or(AppError::NotFound)?;
+    if room.id != room_id {
+        return Err(AppError::NotFound);
+    }
+
+    let job = service::submit_job(
+        &state,
+        &room_id,
+        request.name,
+        request.artifact,
+        request.tasks,
     )
+    .await?;
+
+    Ok(Json(SubmitJobResponse { job_id: job.id }))
 }
 
 pub async fn get_handler(
@@ -60,7 +93,7 @@ pub async fn get_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{body::Body, http::Request};
+    use axum::{body::Body, http::Request, http::StatusCode};
     use tower::ServiceExt;
 
     use crate::contracts::{Artifact, JobStatus, TaskStatus};
@@ -169,5 +202,39 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn submit_job_creates_and_dispatches() {
+        let (state, _dir) = setup().await;
+        let room = service::create_room(&state).await.unwrap();
+
+        let (tx, _rx) = tokio::sync::mpsc::channel(10);
+        state.worker_conns.lock().await.insert("worker-1".into(), tx);
+
+        let app = crate::api::router(state);
+        let body = serde_json::json!({
+            "name": "add",
+            "artifact": {
+                "entry_point": "add",
+                "files": [{ "name": "main.wasm", "content": "AGFzbQ==", "mime": "application/wasm" }]
+            },
+            "tasks": [{ "worker_id": "worker-1", "input": [1, 2] }]
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/room/{}/job/submit", room.id))
+                    .header("Authorization", format!("Bearer {}", room.client_token))
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }

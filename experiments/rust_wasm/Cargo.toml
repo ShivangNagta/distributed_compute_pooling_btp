@@ -1,0 +1,13 @@
+[package]
+name = "rust_wasm"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]     # produce a standalone dynamic library, which for wasm32 is a .wasm file
+
+[profile.release]
+opt-level = "s"             # optimize for size
+lto = true
+panic = "abort"
+strip = true

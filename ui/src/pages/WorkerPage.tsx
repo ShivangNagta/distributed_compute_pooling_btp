@@ -1,28 +1,33 @@
+import { useEffect, useRef, useState } from 'react'
+import { CapabilityList } from '../components/CapabilityList'
+import { CopyButton } from '../components/CopyButton'
+import { PageHeader } from '../components/PageHeader'
+import { StatusBadge } from '../components/StatusBadge'
+import { coordinatorWsUrl, parseMessage } from '../coordinator'
+import { runWasmTask } from '../lib/wasm'
+import { statusTone, taskStatusTone } from '../lib/status'
+import { loadWorkerRooms, saveWorkerRooms, type StoredJoinedRoom } from '../lib/storage'
+import type { Artifact, Capabilities, TaskStatus } from '../types'
 
-import { useRef, useState } from 'react'
-
-type JoinedRoom = {
-  roomId: string
-  roomToken: string
-  status: 'connecting' | 'connected' | 'error'
-  resources: Record<string, unknown>
+type WorkerActivity = {
+  taskId: string
+  jobId: string
+  entryPoint: string
+  fileName: string
+  status: TaskStatus
+  input: unknown
+  result: unknown
+  error: string | null
+  executionTimeMs: number | null
 }
 
-function normalizeResourcePayload(payload: unknown): Record<string, unknown> {
-  if (payload && typeof payload === 'object') {
-    return payload as Record<string, unknown>
-  }
-
-  return {}
-}
-
-async function getCapabilities(): Promise<Record<string, unknown>> {
-  let gpuInfo: Record<string, unknown> | null = null
+async function getCapabilities(): Promise<Capabilities> {
+  let gpuInfo: Capabilities['gpu'] = null
 
   if (navigator.gpu) {
     try {
       const adapter = await navigator.gpu.requestAdapter()
-      if (adapter && adapter.info) {
+      if (adapter?.info) {
         gpuInfo = {
           vendor: adapter.info.vendor,
           architecture: adapter.info.architecture,
@@ -44,13 +49,164 @@ async function getCapabilities(): Promise<Record<string, unknown>> {
   }
 }
 
+async function handleWorkerMessage(
+  socket: WebSocket,
+  raw: unknown,
+  artifacts: Map<string, Artifact>,
+  onActivity: (activity: WorkerActivity) => void,
+): Promise<void> {
+  const message = parseMessage(raw)
+  if (!message) return
+
+  if (message.type === 'job_artifact') {
+    artifacts.set(message.payload.job_id, message.payload.artifact)
+    return
+  }
+
+  if (message.type === 'task_assign') {
+    const task = message.payload
+    const artifact = artifacts.get(task.job_id)
+
+    const base: WorkerActivity = {
+      taskId: task.id,
+      jobId: task.job_id,
+      entryPoint: artifact?.entry_point ?? '',
+      fileName: artifact?.files[0]?.name ?? '',
+      status: 'assigned',
+      input: task.input,
+      result: undefined,
+      error: null,
+      executionTimeMs: null,
+    }
+
+    onActivity(base)
+    socket.send(JSON.stringify({ type: 'task_started', payload: { task_id: task.id } }))
+    onActivity({ ...base, status: 'running' })
+
+    try {
+      if (!artifact) throw new Error('artifact not received yet')
+      const outcome = await runWasmTask(artifact, task)
+      socket.send(
+        JSON.stringify({
+          type: 'task_result',
+          payload: {
+            task_id: task.id,
+            result: outcome.result,
+            execution_time_ms: outcome.execution_time_ms,
+          },
+        }),
+      )
+      onActivity({
+        ...base,
+        status: 'completed',
+        result: outcome.result,
+        executionTimeMs: outcome.execution_time_ms,
+      })
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'execution failed'
+      socket.send(
+        JSON.stringify({ type: 'task_failed', payload: { task_id: task.id, error: reason } }),
+      )
+      onActivity({ ...base, status: 'failed', error: reason })
+    }
+  }
+}
+
+function JoinedRoomCard({ room }: { room: StoredJoinedRoom }) {
+  return (
+    <div className="rounded-md border border-neutral-200 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="mono truncate text-neutral-900">{room.roomId}</span>
+        <StatusBadge tone={statusTone(room.status)}>{room.status}</StatusBadge>
+      </div>
+
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <span className="text-sm text-neutral-600">Room token</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <code className="mono truncate text-neutral-900">{room.roomToken}</code>
+          <CopyButton value={room.roomToken} />
+        </div>
+      </div>
+
+      <CapabilityList capabilities={room.capabilities} />
+    </div>
+  )
+}
+
+function ActivityCard({ activity }: { activity: WorkerActivity }) {
+  return (
+    <div className="rounded-md border border-neutral-200 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium text-neutral-900">
+          Task {activity.taskId.slice(0, 8)}
+        </span>
+        <StatusBadge tone={taskStatusTone(activity.status)}>{activity.status}</StatusBadge>
+      </div>
+
+      <dl className="mt-3 space-y-1.5 text-sm">
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-neutral-500">Job</dt>
+          <dd className="mono truncate text-neutral-900">{activity.jobId}</dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-neutral-500">Module</dt>
+          <dd className="mono truncate text-neutral-900">
+            {activity.fileName || '—'} · {activity.entryPoint || '—'}
+          </dd>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <dt className="text-neutral-500">Input</dt>
+          <dd className="mono text-neutral-900">{JSON.stringify(activity.input)}</dd>
+        </div>
+        {activity.status === 'completed' && (
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-neutral-500">Result</dt>
+            <dd className="mono text-neutral-900">{JSON.stringify(activity.result)}</dd>
+          </div>
+        )}
+        {activity.error && (
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-neutral-500">Error</dt>
+            <dd className="text-red-600">{activity.error}</dd>
+          </div>
+        )}
+        {activity.executionTimeMs != null && (
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-neutral-500">Time</dt>
+            <dd className="text-neutral-900">{activity.executionTimeMs} ms</dd>
+          </div>
+        )}
+      </dl>
+    </div>
+  )
+}
+
 function WorkerPage({ onBack }: { onBack: () => void }) {
   const socketRef = useRef<WebSocket | null>(null)
+  const artifactsRef = useRef<Map<string, Artifact>>(new Map())
   const [roomIdInput, setRoomIdInput] = useState('')
   const [roomTokenInput, setRoomTokenInput] = useState('')
-  const [joinedRooms, setJoinedRooms] = useState<JoinedRoom[]>([])
+  const [joinedRooms, setJoinedRooms] = useState<StoredJoinedRoom[]>(() => loadWorkerRooms())
   const [status, setStatus] = useState('Join a room to start contributing resources.')
   const [isJoining, setIsJoining] = useState(false)
+  const [activities, setActivities] = useState<WorkerActivity[]>([])
+
+  useEffect(() => {
+    saveWorkerRooms(joinedRooms)
+  }, [joinedRooms])
+
+  const upsertRoom = (
+    current: StoredJoinedRoom[],
+    roomId: string,
+    roomToken: string,
+    nextStatus: StoredJoinedRoom['status'],
+    capabilities: Capabilities | null,
+  ) =>
+    current.map((room) =>
+      room.roomId === roomId && room.roomToken === roomToken
+        ? { ...room, status: nextStatus, capabilities }
+        : room,
+    )
 
   const joinRoom = async () => {
     try {
@@ -64,56 +220,41 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
         throw new Error('Both room ID and room token are required.')
       }
 
-      const wsUrl = `ws://localhost:3000/ws/join_room/${encodeURIComponent(roomId)}/${encodeURIComponent(roomToken)}`
-
-      const socket = new WebSocket(wsUrl)
+      const socket = new WebSocket(
+        coordinatorWsUrl(
+          `/ws/join_room/${encodeURIComponent(roomId)}/${encodeURIComponent(roomToken)}`,
+        ),
+      )
       socketRef.current = socket
 
       socket.onopen = async () => {
         const capabilities = await getCapabilities()
-        const to_send = {
-          "message_type": "capability",
-          "metadata": capabilities,
-          "user_id": ""
-        }
-        socket.send(JSON.stringify(to_send))
-        setJoinedRooms((currentRooms) => {
-          const existing = currentRooms.find((room) => room.roomId === roomId && room.roomToken === roomToken)
-          if (existing) {
-            return currentRooms.map((room) =>
-              room.roomId === roomId && room.roomToken === roomToken
-                ? { ...room, status: 'connected', resources: capabilities }
-                : room,
-            )
-          }
-
-          return [
-            {
-              roomId,
-              roomToken,
-              status: 'connected',
-              resources: capabilities,
-            },
-            ...currentRooms,
-          ]
-        })
+        socket.send(JSON.stringify({ type: 'capabilities', payload: capabilities }))
+        setJoinedRooms((current) =>
+          upsertRoom(current, roomId, roomToken, 'connected', capabilities),
+        )
         setStatus(`Connected to room ${roomId}. Your resources are now visible to the client.`)
+      }
+
+      socket.onmessage = (event) => {
+        void handleWorkerMessage(socket, event.data, artifactsRef.current, (activity) => {
+          setActivities((current) => [
+            activity,
+            ...current.filter((item) => item.taskId !== activity.taskId),
+          ])
+        })
       }
 
       socket.onerror = () => {
         setStatus('Could not connect to that room. Check the room ID and room token and try again.')
-        setJoinedRooms((currentRooms) =>
-          currentRooms.map((room) =>
-            room.roomId === roomId && room.roomToken === roomToken ? { ...room, status: 'error' } : room,
-          ),
-        )
+        setJoinedRooms((current) => upsertRoom(current, roomId, roomToken, 'error', null))
       }
 
       socket.onclose = () => {
-        setJoinedRooms((currentRooms) =>
-          currentRooms.map((room) =>
+        setJoinedRooms((current) =>
+          current.map((room) =>
             room.roomId === roomId && room.roomToken === roomToken
-              ? { ...room, status: room.status === 'error' ? 'error' : 'connected' }
+              ? { ...room, status: room.status === 'error' ? 'error' : 'disconnected' }
               : room,
           ),
         )
@@ -127,114 +268,91 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-8 text-slate-800">
-      <div className="mx-auto max-w-6xl">
-        <header className="mb-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Worker mode</p>
-            <h1 className="mt-2 text-3xl font-semibold text-slate-900">Join a compute room</h1>
-          </div>
-          <button
-            type="button"
-            onClick={onBack}
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-500 hover:bg-slate-50"
-          >
-            Back to mode selection
+    <main className="min-h-screen bg-neutral-50 text-neutral-900">
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
+        <PageHeader title="Worker" description="Join a room and contribute your resources.">
+          <button type="button" onClick={onBack} className="btn btn-secondary">
+            Back
           </button>
-        </header>
+        </PageHeader>
 
-        <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <label className="block text-sm font-medium text-slate-700">Room ID</label>
-            <input
-              value={roomIdInput}
-              onChange={(event) => setRoomIdInput(event.target.value)}
-              placeholder="Enter the room ID"
-              className="mt-2 w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-            />
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          <section className="card p-5">
+            <h2 className="text-sm font-semibold">Join a room</h2>
 
-            <label className="mt-5 block text-sm font-medium text-slate-700">Room token</label>
-            <input
-              value={roomTokenInput}
-              onChange={(event) => setRoomTokenInput(event.target.value)}
-              placeholder="Enter the room token"
-              className="mt-2 w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
-            />
+            <div className="mt-4">
+              <label className="label" htmlFor="room-id">
+                Room ID
+              </label>
+              <input
+                id="room-id"
+                className="input"
+                value={roomIdInput}
+                onChange={(event) => setRoomIdInput(event.target.value)}
+                placeholder="Enter the room ID"
+              />
+            </div>
+
+            <div className="mt-4">
+              <label className="label" htmlFor="room-token">
+                Room token
+              </label>
+              <input
+                id="room-token"
+                className="input"
+                value={roomTokenInput}
+                onChange={(event) => setRoomTokenInput(event.target.value)}
+                placeholder="Enter the room token"
+              />
+            </div>
 
             <button
               type="button"
               disabled={isJoining}
               onClick={joinRoom}
-              className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+              className="btn btn-primary mt-5 w-full"
             >
-              {isJoining ? 'Joining room...' : 'Join room'}
+              {isJoining ? 'Joining...' : 'Join room'}
             </button>
 
-            <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">{status}</div>
-          </div>
+            {status ? <p className="mt-4 text-sm text-neutral-500">{status}</p> : null}
+          </section>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-slate-900">Connected rooms</h2>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                {joinedRooms.length}
-              </span>
+          <section className="card p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold">Joined rooms</h2>
+              <span className="text-xs text-neutral-500">{joinedRooms.length}</span>
             </div>
 
             {joinedRooms.length === 0 ? (
-              <div className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
-                No rooms joined yet.
-              </div>
+              <p className="text-sm text-neutral-500">No rooms joined yet.</p>
             ) : (
-              <div className="mt-5 space-y-4">
+              <div className="space-y-3">
                 {joinedRooms.map((room) => (
-                  <div key={`${room.roomId}-${room.roomToken}`} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-500">Room</p>
-                        <h3 className="mt-1 text-base font-semibold text-slate-900">{room.roomId}</h3>
-                      </div>
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs font-medium ${
-                          room.status === 'connected'
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : room.status === 'error'
-                              ? 'bg-rose-100 text-rose-700'
-                              : 'bg-amber-100 text-amber-700'
-                        }`}
-                      >
-                        {room.status}
-                      </span>
-                    </div>
-
-                    <dl className="mt-4 space-y-2 text-sm text-slate-600">
-                      <div className="flex items-center justify-between gap-3">
-                        <dt>Room token</dt>
-                        <dd className="font-medium text-slate-900">{room.roomToken}</dd>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <dt>CPU cores</dt>
-                        <dd className="font-medium text-slate-900">{String(normalizeResourcePayload(room.resources).cores ?? 'N/A')}</dd>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <dt>Memory</dt>
-                        <dd className="font-medium text-slate-900">
-                          {(() => {
-                            const memoryGB = normalizeResourcePayload(room.resources).memoryGB
-                            return memoryGB !== null && memoryGB !== undefined ? `${memoryGB} GB` : 'N/A'
-                          })()}
-                        </dd>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <dt>Platform</dt>
-                        <dd className="font-medium text-slate-900">{String(normalizeResourcePayload(room.resources).platform ?? 'N/A')}</dd>
-                      </div>
-                    </dl>
-                  </div>
+                  <JoinedRoomCard key={`${room.roomId}-${room.roomToken}`} room={room} />
                 ))}
               </div>
             )}
+          </section>
+        </div>
+
+        <section className="card mt-6 p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Job activity</h2>
+            <span className="text-xs text-neutral-500">{activities.length}</span>
           </div>
+
+          {activities.length === 0 ? (
+            <p className="text-sm text-neutral-500">
+              No jobs yet. Assigned tasks appear here with what was received and the result.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {activities.map((activity) => (
+                <ActivityCard key={activity.taskId} activity={activity} />
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </main>

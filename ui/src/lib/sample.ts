@@ -3,8 +3,7 @@ import type { Artifact } from '../types'
 // Minimal wasm module exporting `add(i32, i32) -> i32`.
 // Generated as raw bytes and verified with `wasmtime add.wasm add 1 2` -> 3.
 const SAMPLE_WASM_BASE64 =
-  // 'AGFzbQEAAAABBwFgAn9/AX8DAgEABwcBA2FkZAAACgkBBwAgACABags='
-  'AGFzbQEAAAABBwFgAn9/AX8DAgEABwcBA3N1YgAACgkBBwAgACABaws='
+  'AGFzbQEAAAABBwFgAn9/AX8DAgEABwcBA2FkZAAACgkBBwAgACABags='
 
 export const SAMPLE_ENTRY_POINT = 'add'
 

@@ -1,4 +1,4 @@
-use rand::{distr::Alphanumeric, RngExt};
+use rand::{RngExt, distr::Alphanumeric};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn now_ms() -> i64 {

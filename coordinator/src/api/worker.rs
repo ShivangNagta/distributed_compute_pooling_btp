@@ -1,7 +1,7 @@
 use axum::{
     extract::{
-        ws::{Message as WsMessage, WebSocket, WebSocketUpgrade},
         Path, State,
+        ws::{Message as WsMessage, WebSocket, WebSocketUpgrade},
     },
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -21,9 +21,7 @@ pub async fn ws_handler(
     let room = match state.repo.get_room(&room_id).await {
         Ok(Some(room)) if room.status == RoomStatus::Active => room,
         Ok(_) => return (StatusCode::NOT_FOUND, "Room is not active").into_response(),
-        Err(_) => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, "internal error").into_response()
-        }
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "internal error").into_response(),
     };
 
     if room.worker_token != room_token {
@@ -34,12 +32,7 @@ pub async fn ws_handler(
     ws.on_upgrade(move |socket| handle_socket(socket, state, room_id, client_token))
 }
 
-async fn handle_socket(
-    socket: WebSocket,
-    state: AppState,
-    room_id: String,
-    client_token: String,
-) {
+async fn handle_socket(socket: WebSocket, state: AppState, room_id: String, client_token: String) {
     let (mut ws_sender, mut ws_receiver) = socket.split();
     let (tx, mut rx) = mpsc::channel::<WsMessage>(BUFFER_SIZE);
 
@@ -78,7 +71,17 @@ async fn handle_socket(
         };
         let events = match service::handle_worker_message(&state, &worker_id, message).await {
             Ok(events) => events,
-            Err(_) => continue,
+            Err(error) => {
+                service::send_to_client(
+                    &state,
+                    &client_token,
+                    &Message::Error {
+                        reason: error.to_string(),
+                    },
+                )
+                .await;
+                continue;
+            }
         };
         for event in events {
             service::send_to_client(&state, &client_token, &event).await;

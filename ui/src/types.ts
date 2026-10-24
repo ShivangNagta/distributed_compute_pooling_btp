@@ -31,9 +31,12 @@ export interface File {
   mime?: string | null
 }
 
+export type ArtifactKind = 'wasm' | 'shader_compute'
+
 export interface Artifact {
   entry_point: string
   files: File[]
+  kind?: ArtifactKind
 }
 
 export interface Job {

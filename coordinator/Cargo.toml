@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+base64 = "0.22"
+bytemuck = { version = "1.23", features = ["derive"] }
+futures-channel = "0.3.34"
 futures-util = "0.3.34"
 rand = "0.10.3"
 axum = { version = "0.8.9", features = ["ws"] }
@@ -12,6 +15,7 @@ tower-http = { version = "0.7.0", features = ["cors"] }
 uuid = { version = "1.0", features = ["v4"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+wgpu = "25"
 sqlx = { version = "0.9", default-features = false, features = [
     "runtime-tokio",
     "sqlite",

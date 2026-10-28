@@ -17,7 +17,8 @@ use crate::util::{generate_token, now_ms};
 #[derive(Deserialize)]
 pub struct NewTask {
     pub worker_id: String,
-    pub input: Value,
+    #[serde(default)]
+    pub input: Option<Value>,
 }
 
 pub async fn submit_job(
@@ -28,7 +29,9 @@ pub async fn submit_job(
     tasks: Vec<NewTask>,
 ) -> Result<Job, AppError> {
     if tasks.is_empty() {
-        return Err(AppError::BadRequest("job must have at least one task".into()));
+        return Err(AppError::BadRequest(
+            "job must have at least one task".into(),
+        ));
     }
 
     let worker_ids: Vec<&str> = {
@@ -40,7 +43,9 @@ pub async fn submit_job(
             .collect()
     };
     if let Some(id) = worker_ids.first() {
-        return Err(AppError::BadRequest(format!("worker {id} is not connected")));
+        return Err(AppError::BadRequest(format!(
+            "worker {id} is not connected"
+        )));
     }
 
     let job = Job {
@@ -61,7 +66,7 @@ pub async fn submit_job(
             job_id: job.id.clone(),
             worker_id: Some(task.worker_id),
             status: TaskStatus::Pending,
-            input: task.input,
+            input: task.input.unwrap_or(Value::Null),
             result: None,
             error: None,
             execution_time_ms: None,
@@ -76,7 +81,11 @@ pub async fn submit_job(
 /// Sends the artifact once per worker, then each task. The client is notified
 /// as tasks move to Assigned and the job moves to Running.
 async fn dispatch_job(state: &AppState, room_id: &str, job_id: &str) -> Result<(), AppError> {
-    let job = state.repo.get_job(job_id).await?.ok_or(AppError::NotFound)?;
+    let job = state
+        .repo
+        .get_job(job_id)
+        .await?
+        .ok_or(AppError::NotFound)?;
     let tasks = state.repo.get_tasks_by_job(job_id).await?;
 
     let mut artifact_sent: Vec<String> = Vec::new();
@@ -109,7 +118,10 @@ async fn dispatch_job(state: &AppState, room_id: &str, job_id: &str) -> Result<(
         assigned.push(updated);
     }
 
-    state.repo.set_job_status(job_id, JobStatus::Running).await?;
+    state
+        .repo
+        .set_job_status(job_id, JobStatus::Running)
+        .await?;
     state.repo.set_job_started(job_id, now_ms()).await?;
 
     let client_token = state
@@ -304,7 +316,26 @@ async fn finish_job_if_done(state: &AppState, job_id: &str) -> Result<Vec<Messag
     }
 
     let any_failed = tasks.iter().any(|t| t.status == TaskStatus::Failed);
-    fail_job_with(state, job_id, if any_failed { JobStatus::Failed } else { JobStatus::Completed }).await
+    let status = if any_failed {
+        JobStatus::Failed
+    } else {
+        JobStatus::Completed
+    };
+    let mut messages = if !any_failed {
+        let job = state
+            .repo
+            .get_job(job_id)
+            .await?
+            .ok_or(AppError::NotFound)?;
+        if job.artifact.kind == crate::contracts::ArtifactKind::ShaderCompute {
+            crate::shader_handler::aggregate_tiles(&tasks)?;
+        }
+        Vec::new()
+    } else {
+        Vec::new()
+    };
+    messages.extend(fail_job_with(state, job_id, status).await?);
+    Ok(messages)
 }
 
 async fn fail_job_with(
@@ -359,6 +390,7 @@ mod tests {
             artifact: Artifact {
                 entry_point: "main".into(),
                 files: Vec::new(),
+                kind: Default::default(),
             },
             status: JobStatus::Created,
             created_at: 1,
@@ -376,9 +408,11 @@ mod tests {
         assert!(state.workers.lock().await.contains_key(&worker.id));
 
         let events = remove_worker(&state, &worker.id).await.unwrap();
-        assert!(events
-            .iter()
-            .any(|m| matches!(m, Message::WorkerLeft { .. })));
+        assert!(
+            events
+                .iter()
+                .any(|m| matches!(m, Message::WorkerLeft { .. }))
+        );
         assert!(!state.workers.lock().await.contains_key(&worker.id));
     }
 
@@ -421,7 +455,11 @@ mod tests {
         let room = create_room(&state).await.unwrap();
 
         let job = sample_job(&room.id);
-        state.repo.create_job(&job, &[sample_task(&job.id)]).await.unwrap();
+        state
+            .repo
+            .create_job(&job, &[sample_task(&job.id)])
+            .await
+            .unwrap();
 
         let events = handle_worker_message(
             &state,
@@ -450,7 +488,11 @@ mod tests {
         let room = create_room(&state).await.unwrap();
 
         let job = sample_job(&room.id);
-        state.repo.create_job(&job, &[sample_task(&job.id)]).await.unwrap();
+        state
+            .repo
+            .create_job(&job, &[sample_task(&job.id)])
+            .await
+            .unwrap();
 
         let _ = handle_worker_message(
             &state,
@@ -496,10 +538,11 @@ mod tests {
                 content: "AGFzbQ==".into(),
                 mime: Some("application/wasm".into()),
             }],
+            kind: Default::default(),
         };
         let tasks = vec![NewTask {
             worker_id: "worker-1".into(),
-            input: serde_json::json!([1, 2]),
+            input: Some(serde_json::json!([1, 2])),
         }];
 
         let job = submit_job(&state, &room.id, "add job".into(), artifact, tasks)
@@ -537,18 +580,12 @@ mod tests {
 
         let tasks = vec![NewTask {
             worker_id: "ghost".into(),
-            input: serde_json::json!([]),
+            input: Some(serde_json::json!([])),
         }];
 
-        let err = submit_job(
-            &state,
-            &room.id,
-            "add".into(),
-            Artifact::default(),
-            tasks,
-        )
-        .await
-        .unwrap_err();
+        let err = submit_job(&state, &room.id, "add".into(), Artifact::default(), tasks)
+            .await
+            .unwrap_err();
 
         assert!(matches!(err, AppError::BadRequest(_)));
     }

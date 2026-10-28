@@ -1,11 +1,11 @@
 use axum::{
+    Json,
     extract::{
-        ws::{Message as WsMessage, WebSocket, WebSocketUpgrade},
         Path, State,
+        ws::{Message as WsMessage, WebSocket, WebSocketUpgrade},
     },
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
@@ -42,9 +42,7 @@ pub async fn ws_handler(
     let room = match state.repo.get_room(&room_id).await {
         Ok(Some(room)) if room.status == RoomStatus::Active => room,
         Ok(_) => return (StatusCode::NOT_FOUND, "Room is not active").into_response(),
-        Err(_) => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, "internal error").into_response()
-        }
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "internal error").into_response(),
     };
 
     if room.client_token != client_token {
@@ -93,12 +91,10 @@ mod tests {
     async fn create_room_returns_tokens() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("test.db");
-        let repo = crate::repository::Repository::open(&format!(
-            "sqlite://{}?mode=rwc",
-            path.display()
-        ))
-        .await
-        .unwrap();
+        let repo =
+            crate::repository::Repository::open(&format!("sqlite://{}?mode=rwc", path.display()))
+                .await
+                .unwrap();
         repo.migrate().await.unwrap();
 
         let app = crate::api::router(AppState::new(repo));

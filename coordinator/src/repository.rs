@@ -1,5 +1,5 @@
-use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 use sqlx::Row;
+use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 
 use crate::contracts::{Job, JobStatus, Room, RoomStatus, Task, TaskStatus};
 use crate::error::AppError;
@@ -357,6 +357,7 @@ mod tests {
                     content: "AGFzbQ==".into(),
                     mime: Some("application/wasm".into()),
                 }],
+                kind: Default::default(),
             },
             status: JobStatus::Created,
             created_at: 1,
@@ -399,6 +400,7 @@ mod tests {
             artifact: Artifact {
                 entry_point: "main".into(),
                 files: Vec::new(),
+                kind: Default::default(),
             },
             status: JobStatus::Created,
             created_at: 1,
@@ -423,7 +425,9 @@ mod tests {
         task.execution_time_ms = Some(7);
         repo.update_task(&task).await.unwrap();
 
-        repo.set_job_status("job-1", JobStatus::Running).await.unwrap();
+        repo.set_job_status("job-1", JobStatus::Running)
+            .await
+            .unwrap();
         repo.set_job_started("job-1", 100).await.unwrap();
         repo.set_job_finished("job-1", 200).await.unwrap();
 
@@ -450,6 +454,7 @@ mod tests {
             artifact: Artifact {
                 entry_point: "main".into(),
                 files: Vec::new(),
+                kind: Default::default(),
             },
             status: JobStatus::Created,
             created_at: 1,

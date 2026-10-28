@@ -169,11 +169,26 @@ pub struct File {
     pub mime: Option<String>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ArtifactKind {
+    Wasm,
+    ShaderCompute,
+}
+
+impl Default for ArtifactKind {
+    fn default() -> Self {
+        Self::Wasm
+    }
+}
+
 /// The executable payload of a job.
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
 pub struct Artifact {
     pub entry_point: String,
     pub files: Vec<File>,
+    #[serde(default)]
+    pub kind: ArtifactKind,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -209,21 +224,33 @@ pub struct Task {
 pub enum Message {
     Capabilities(Capabilities),
     WorkerJoined(Worker),
-    WorkerLeft { worker_id: String },
+    WorkerLeft {
+        worker_id: String,
+    },
     /// Sent once per job before its tasks, so the artifact is not repeated on
     /// every TaskAssign.
-    JobArtifact { job_id: String, artifact: Artifact },
+    JobArtifact {
+        job_id: String,
+        artifact: Artifact,
+    },
     TaskAssign(Task),
-    TaskStarted { task_id: String },
+    TaskStarted {
+        task_id: String,
+    },
     TaskResult {
         task_id: String,
         result: Value,
         execution_time_ms: u64,
     },
-    TaskFailed { task_id: String, error: String },
+    TaskFailed {
+        task_id: String,
+        error: String,
+    },
     JobUpdate(Job),
     TaskUpdate(Task),
-    Error { reason: String },
+    Error {
+        reason: String,
+    },
 }
 
 #[cfg(test)]
@@ -268,6 +295,7 @@ mod tests {
                     mime: Some("text/csv".into()),
                 },
             ],
+            kind: ArtifactKind::Wasm,
         };
 
         let json = serde_json::to_string(&Message::JobArtifact {
@@ -278,7 +306,13 @@ mod tests {
         let value: Value = serde_json::from_str(&json).unwrap();
         assert_eq!(value["type"], "job_artifact");
         assert_eq!(value["payload"]["artifact"]["entry_point"], "sum");
-        assert_eq!(value["payload"]["artifact"]["files"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            value["payload"]["artifact"]["files"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
     }
 
     #[test]
@@ -289,8 +323,7 @@ mod tests {
             execution_time_ms: 42,
         };
 
-        let value: Value =
-            serde_json::from_str(&serde_json::to_string(&msg).unwrap()).unwrap();
+        let value: Value = serde_json::from_str(&serde_json::to_string(&msg).unwrap()).unwrap();
         assert_eq!(value["type"], "task_result");
         assert_eq!(value["payload"]["task_id"], "t1");
         assert_eq!(value["payload"]["execution_time_ms"], 42);

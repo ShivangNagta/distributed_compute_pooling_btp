@@ -4,7 +4,9 @@ mod contracts;
 mod error;
 mod repository;
 mod service;
+mod shader_handler;
 mod util;
+mod wgpu_worker;
 
 use app_state::AppState;
 use repository::Repository;

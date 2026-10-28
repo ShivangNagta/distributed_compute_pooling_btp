@@ -1,11 +1,12 @@
 pub mod job;
+pub mod requests;
 pub mod room;
 pub mod worker;
 
 use axum::{
+    Router,
     http::header::{AUTHORIZATION, CONTENT_TYPE},
     routing::{get, post},
-    Router,
 };
 use tower_http::cors::{Any, CorsLayer};
 
@@ -21,8 +22,16 @@ pub fn router(state: AppState) -> Router {
         .route("/", get(root))
         .route("/create_room", post(room::create_room_handler))
         .route("/ws/{room_id}/{client_token}", get(room::ws_handler))
-        .route("/ws/join_room/{room_id}/{room_token}", get(worker::ws_handler))
+        .route(
+            "/ws/join_room/{room_id}/{room_token}",
+            get(worker::ws_handler),
+        )
         .route("/room/{room_id}/job/submit", post(job::submit_handler))
+        // .route("/room/{room_id}/wasm-job/submit", post(job::submit_handler))
+        // .route(
+        //     "/room/{room_id}/shader-job/submit",
+        //     post(job::submit_handler),
+        // )
         .route("/room/{room_id}/job/{job_id}", get(job::get_handler))
         .with_state(state)
         .layer(cors)

@@ -4,7 +4,7 @@ import { CopyButton } from '../components/CopyButton'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { coordinatorWsUrl, parseMessage } from '../coordinator'
-import { runWasmTask } from '../lib/wasm'
+import { runTask } from '../lib/wasm'
 import { statusTone, taskStatusTone } from '../lib/status'
 import { loadWorkerRooms, saveWorkerRooms, type StoredJoinedRoom } from '../lib/storage'
 import type { Artifact, Capabilities, TaskStatus } from '../types'
@@ -85,7 +85,7 @@ async function handleWorkerMessage(
 
     try {
       if (!artifact) throw new Error('artifact not received yet')
-      const outcome = await runWasmTask(artifact, task)
+      const outcome = await runTask(artifact, task)
       socket.send(
         JSON.stringify({
           type: 'task_result',

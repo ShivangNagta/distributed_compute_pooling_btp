@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { CapabilityList } from '../components/CapabilityList'
 import { CopyButton } from '../components/CopyButton'
 import { PageHeader } from '../components/PageHeader'
@@ -112,18 +112,18 @@ async function handleWorkerMessage(
   }
 }
 
-function JoinedRoomCard({ room }: { room: StoredJoinedRoom }) {
+const JoinedRoomCard = memo(function JoinedRoomCard({ room }: { room: StoredJoinedRoom }) {
   return (
-    <div className="rounded-md border border-neutral-200 p-3">
+    <div className="subcard">
       <div className="flex items-center justify-between gap-2">
-        <span className="mono truncate text-neutral-900">{room.roomId}</span>
+        <span className="mono truncate text-tx-primary">{room.roomId}</span>
         <StatusBadge tone={statusTone(room.status)}>{room.status}</StatusBadge>
       </div>
 
       <div className="mt-2 flex items-center justify-between gap-3">
-        <span className="text-sm text-neutral-600">Room token</span>
+        <span className="text-sm text-tx-secondary">Room token</span>
         <div className="flex min-w-0 items-center gap-2">
-          <code className="mono truncate text-neutral-900">{room.roomToken}</code>
+          <code className="mono truncate text-tx-primary">{room.roomToken}</code>
           <CopyButton value={room.roomToken} />
         </div>
       </div>
@@ -131,13 +131,13 @@ function JoinedRoomCard({ room }: { room: StoredJoinedRoom }) {
       <CapabilityList capabilities={room.capabilities} />
     </div>
   )
-}
+})
 
-function ActivityCard({ activity }: { activity: WorkerActivity }) {
+const ActivityCard = memo(function ActivityCard({ activity }: { activity: WorkerActivity }) {
   return (
-    <div className="rounded-md border border-neutral-200 p-3">
+    <div className="subcard">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-neutral-900">
+        <span className="text-sm font-medium text-tx-primary">
           Task {activity.taskId.slice(0, 8)}
         </span>
         <StatusBadge tone={taskStatusTone(activity.status)}>{activity.status}</StatusBadge>
@@ -145,41 +145,41 @@ function ActivityCard({ activity }: { activity: WorkerActivity }) {
 
       <dl className="mt-3 space-y-1.5 text-sm">
         <div className="flex items-center justify-between gap-3">
-          <dt className="text-neutral-500">Job</dt>
-          <dd className="mono truncate text-neutral-900">{activity.jobId}</dd>
+          <dt className="text-tx-muted">Job</dt>
+          <dd className="mono truncate text-tx-primary">{activity.jobId}</dd>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <dt className="text-neutral-500">Module</dt>
-          <dd className="mono truncate text-neutral-900">
+          <dt className="text-tx-muted">Module</dt>
+          <dd className="mono truncate text-tx-primary">
             {activity.fileName || '—'} · {activity.entryPoint || '—'}
           </dd>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <dt className="text-neutral-500">Input</dt>
-          <dd className="mono text-neutral-900">{JSON.stringify(activity.input)}</dd>
+          <dt className="text-tx-muted">Input</dt>
+          <dd className="mono text-tx-primary">{JSON.stringify(activity.input)}</dd>
         </div>
         {activity.status === 'completed' && (
           <div className="flex items-center justify-between gap-3">
-            <dt className="text-neutral-500">Result</dt>
-            <dd className="mono text-neutral-900">{JSON.stringify(activity.result)}</dd>
+            <dt className="text-tx-muted">Result</dt>
+            <dd className="mono text-tx-primary">{JSON.stringify(activity.result)}</dd>
           </div>
         )}
         {activity.error && (
           <div className="flex items-center justify-between gap-3">
-            <dt className="text-neutral-500">Error</dt>
-            <dd className="text-red-600">{activity.error}</dd>
+            <dt className="text-tx-muted">Error</dt>
+            <dd className="text-danger">{activity.error}</dd>
           </div>
         )}
         {activity.executionTimeMs != null && (
           <div className="flex items-center justify-between gap-3">
-            <dt className="text-neutral-500">Time</dt>
-            <dd className="text-neutral-900">{activity.executionTimeMs} ms</dd>
+            <dt className="text-tx-muted">Time</dt>
+            <dd className="text-tx-primary">{activity.executionTimeMs} ms</dd>
           </div>
         )}
       </dl>
     </div>
   )
-}
+})
 
 function WorkerPage({ onBack }: { onBack: () => void }) {
   const socketRef = useRef<WebSocket | null>(null)
@@ -268,7 +268,7 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <main className="min-h-screen bg-neutral-50 text-neutral-900">
+    <main className="min-h-screen bg-base text-tx-primary">
       <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
         <PageHeader title="Worker" description="Join a room and contribute your resources.">
           <button type="button" onClick={onBack} className="btn btn-secondary">
@@ -278,7 +278,7 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
 
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
           <section className="card p-5">
-            <h2 className="text-sm font-semibold">Join a room</h2>
+            <h2 className="section-title">Join a room</h2>
 
             <div className="mt-4">
               <label className="label" htmlFor="room-id">
@@ -315,17 +315,17 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
               {isJoining ? 'Joining...' : 'Join room'}
             </button>
 
-            {status ? <p className="mt-4 text-sm text-neutral-500">{status}</p> : null}
+            {status ? <p className="mt-4 text-sm text-tx-muted">{status}</p> : null}
           </section>
 
           <section className="card p-5">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold">Joined rooms</h2>
-              <span className="text-xs text-neutral-500">{joinedRooms.length}</span>
+              <h2 className="section-title">Joined rooms</h2>
+              <span className="text-xs text-tx-muted">{joinedRooms.length}</span>
             </div>
 
             {joinedRooms.length === 0 ? (
-              <p className="text-sm text-neutral-500">No rooms joined yet.</p>
+              <p className="text-sm text-tx-muted">No rooms joined yet.</p>
             ) : (
               <div className="space-y-3">
                 {joinedRooms.map((room) => (
@@ -338,12 +338,12 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
 
         <section className="card mt-6 p-5">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Job activity</h2>
-            <span className="text-xs text-neutral-500">{activities.length}</span>
+            <h2 className="section-title">Job activity</h2>
+            <span className="text-xs text-tx-muted">{activities.length}</span>
           </div>
 
           {activities.length === 0 ? (
-            <p className="text-sm text-neutral-500">
+            <p className="text-sm text-tx-muted">
               No jobs yet. Assigned tasks appear here with what was received and the result.
             </p>
           ) : (

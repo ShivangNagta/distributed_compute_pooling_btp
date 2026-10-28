@@ -15,20 +15,20 @@ function ModeCard({
     <button
       type="button"
       onClick={onSelect}
-      className="card p-4 text-left transition hover:border-neutral-400"
+      className="card card-interactive p-4"
     >
-      <span className="block text-base font-medium text-neutral-900">{title}</span>
-      <span className="mt-1 block text-sm text-neutral-500">{description}</span>
+      <span className="block text-lg font-medium text-tx-primary">{title}</span>
+      <span className="mt-1 block text-sm text-tx-muted">{description}</span>
     </button>
   )
 }
 
 function HomePage({ onSelectMode }: { onSelectMode: (mode: 'client' | 'worker') => void }) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-neutral-50 px-4 py-8 text-neutral-900">
+    <main className="flex min-h-screen items-center justify-center bg-base px-4 py-8 text-tx-primary">
       <div className="w-full max-w-xl">
-        <h1 className="text-2xl font-semibold">Browser Compute Pool</h1>
-        <p className="mt-1 text-sm text-neutral-600">
+        <h1 className="text-3xl font-semibold">Browser Compute Pool</h1>
+        <p className="mt-2 text-sm text-tx-secondary">
           Pool browser CPU and GPU resources to run jobs remotely.
         </p>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">

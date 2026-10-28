@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
+﻿import { memo, useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { CapabilityList } from '../components/CapabilityList'
 import { CopyButton } from '../components/CopyButton'
 import { PageHeader } from '../components/PageHeader'
@@ -28,9 +28,8 @@ async function composeImage(
   jobId: string,
   width: number,
   height: number,
-  pixelsBase64: string,
+  bytes: Uint8Array,
 ): Promise<RenderedFrame> {
-  const bytes = decodeBase64(pixelsBase64)
   if (bytes.length !== width * height * 4) {
     throw new Error('Coordinator returned an invalid image buffer.')
   }
@@ -91,7 +90,7 @@ async function composeImageFromTasks(jobId: string, tasks: JobRecord['tasks']): 
       pixels.set(bytes.subarray(source, source + tileWidth * 4), target)
     }
   }
-  return composeImage(jobId, width, height, bytesToBase64(pixels))
+  return composeImage(jobId, width, height, pixels)
 }
 
 function decodeBase64(value: string): Uint8Array {
@@ -123,47 +122,50 @@ function TokenRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-3 py-2">
       <div className="min-w-0">
-        <div className="text-sm text-neutral-600">{label}</div>
-        <code className="mono mt-0.5 block break-all text-neutral-900">{value}</code>
+        <div className="text-sm text-tx-secondary">{label}</div>
+        <code className="mono mt-0.5 block break-all text-tx-primary">{value}</code>
       </div>
       <CopyButton value={value} />
     </div>
   )
 }
 
-function WorkerCard({ worker }: { worker: Worker }) {
+const WorkerCard = memo(function WorkerCard({ worker }: { worker: Worker }) {
   return (
-    <div className="rounded-md border border-neutral-200 p-3">
+    <div className="subcard">
       <div className="flex items-center justify-between gap-2">
-        <span className="mono truncate text-neutral-900">{worker.id}</span>
+        <span className="mono truncate text-tx-primary">{worker.id}</span>
         <StatusBadge tone={statusTone(worker.status)}>{worker.status}</StatusBadge>
       </div>
       <CapabilityList capabilities={worker.capabilities} />
     </div>
   )
-}
+})
 
-function JobCard({ record }: { record: JobRecord }) {
+const JobCard = memo(function JobCard({ record }: { record: JobRecord }) {
   const isWgpu = record.job.artifact.kind === 'shader_compute'
+  const showTaskStatus = record.tasks.length > 1
   return (
-    <div className="rounded-md border border-neutral-200 p-3">
+    <div className="subcard">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-neutral-900">{record.job.name}</span>
+        <span className="text-sm font-medium text-tx-primary">{record.job.name}</span>
         <StatusBadge tone={jobStatusTone(record.job.status)}>{record.job.status}</StatusBadge>
       </div>
-      <div className="mono mt-1 text-xs text-neutral-500">{record.job.id}</div>
+      <div className="mono mt-1 text-xs text-tx-muted">{record.job.id}</div>
 
       <div className="mt-3 space-y-2">
         {record.tasks.length === 0 ? (
-          <p className="text-sm text-neutral-500">Waiting for tasks...</p>
+          <p className="text-sm text-tx-muted">Waiting for tasks...</p>
         ) : (
           record.tasks.map((task) => (
-            <div key={task.id} className="rounded-md bg-neutral-50 p-2 text-sm">
+            <div key={task.id} className="tile text-sm">
               <div className="flex items-center justify-between gap-2">
-                <span className="mono truncate text-neutral-600">{task.worker_id ?? 'unassigned'}</span>
-                <StatusBadge tone={taskStatusTone(task.status)}>{task.status}</StatusBadge>
+                <span className="mono truncate text-tx-secondary">{task.worker_id ?? 'unassigned'}</span>
+                {showTaskStatus ? (
+                  <StatusBadge tone={taskStatusTone(task.status)}>{task.status}</StatusBadge>
+                ) : null}
               </div>
-              <div className="mt-1 break-words text-neutral-900">
+              <div className="mt-1 break-words text-tx-primary">
                 {task.error
                   ? `Error: ${task.error}`
                   : isWgpu
@@ -179,7 +181,7 @@ function JobCard({ record }: { record: JobRecord }) {
       </div>
     </div>
   )
-}
+})
 
 function ClientPage({ onBack }: { onBack: () => void }) {
   const socketByRoom = useRef<Record<string, WebSocket>>({})
@@ -299,10 +301,11 @@ function ClientPage({ onBack }: { onBack: () => void }) {
       (item) =>
         item.job.artifact.kind === 'shader_compute' &&
         item.tasks.length > 0 &&
-        item.tasks.every((task) => task.status === 'completed') &&
-        renderedFrame?.jobId !== item.job.id,
+        item.tasks.every((task) => task.status === 'completed'),
     )
-    if (!record) return () => { cancelled = true }
+    if (!record || record.job.id === renderedFrame?.jobId) {
+      return () => { cancelled = true }
+    }
     void composeImageFromTasks(record.job.id, record.tasks)
       .then((frame) => {
         if (cancelled) {
@@ -557,7 +560,7 @@ function ClientPage({ onBack }: { onBack: () => void }) {
   const activeRoom = rooms.find((room) => room.id === activeRoomId) ?? rooms[0] ?? null
 
   return (
-    <main className="min-h-screen bg-neutral-50 text-neutral-900">
+    <main className="min-h-screen bg-base text-tx-primary">
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         <PageHeader title="Client" description="Create a room and monitor connected workers.">
           <button
@@ -576,12 +579,12 @@ function ClientPage({ onBack }: { onBack: () => void }) {
         <div className="mt-6 grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="card p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold">Rooms</h2>
-              <span className="text-xs text-neutral-500">{rooms.length}</span>
+              <h2 className="section-title">Rooms</h2>
+              <span className="text-xs text-tx-muted">{rooms.length}</span>
             </div>
 
             {rooms.length === 0 ? (
-              <p className="text-sm text-neutral-500">No rooms yet. Create one to get started.</p>
+              <p className="text-sm text-tx-muted">No rooms yet. Create one to get started.</p>
             ) : (
               <ul className="space-y-2">
                 {rooms.map((room) => {
@@ -591,19 +594,19 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                       <button
                         type="button"
                         onClick={() => setActiveRoomId(room.id)}
-                        className={`w-full rounded-md border p-2.5 text-left transition ${
+                        className={`w-full rounded-sm border p-2.5 text-left transition ${
                           isActive
-                            ? 'border-neutral-900 bg-neutral-900 text-white'
-                            : 'border-neutral-200 bg-white hover:border-neutral-300'
+                            ? 'border-accent bg-accent text-panel'
+                            : 'border-border-strong bg-panel hover:border-accent hover:bg-surface'
                         }`}
                       >
                         <span
-                          className={`mono block truncate ${isActive ? 'text-white' : 'text-neutral-900'}`}
+                          className={`mono block truncate ${isActive ? 'text-panel' : 'text-tx-primary'}`}
                         >
                           {room.id}
                         </span>
                         <span
-                          className={`mt-1 block text-xs ${isActive ? 'text-neutral-300' : 'text-neutral-500'}`}
+                          className={`mt-1 block text-xs ${isActive ? 'text-panel/80' : 'text-tx-muted'}`}
                         >
                           {room.workers.length} workers
                         </span>
@@ -618,24 +621,24 @@ function ClientPage({ onBack }: { onBack: () => void }) {
           <section className="card p-5">
             {activeRoom ? (
               <>
-                <h2 className="text-sm font-semibold">Active room</h2>
-                <div className="mt-2 divide-y divide-neutral-100 border-t border-neutral-200">
+                <h2 className="section-title">Active room</h2>
+                <div className="mt-2 divide-y divide-border border-t border-border">
                   <TokenRow label="Room ID" value={activeRoom.id} />
                   <TokenRow label="Worker token" value={activeRoom.workerToken} />
                   <TokenRow label="Client token" value={activeRoom.clientToken} />
                 </div>
 
-                {status ? <p className="mt-4 text-sm text-neutral-500">{status}</p> : null}
-                {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
+                {status ? <p className="mt-4 text-sm text-tx-muted">{status}</p> : null}
+                {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
 
                 <div className="mt-6">
                   <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold">Workers</h3>
-                    <span className="text-xs text-neutral-500">{activeRoom.workers.length}</span>
+                    <h3 className="section-title">Workers</h3>
+                    <span className="text-xs text-tx-muted">{activeRoom.workers.length}</span>
                   </div>
 
                   {activeRoom.workers.length === 0 ? (
-                    <p className="rounded-md border border-dashed border-neutral-300 p-4 text-sm text-neutral-500">
+                    <p className="rounded-sm border border-dashed border-border p-4 text-sm text-tx-muted">
                       No workers have joined this room yet.
                     </p>
                   ) : (
@@ -648,7 +651,7 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                 </div>
               </>
             ) : (
-              <p className="py-10 text-center text-sm text-neutral-500">
+              <p className="py-10 text-center text-sm text-tx-muted">
                 Create a room to begin.
               </p>
             )}
@@ -657,7 +660,7 @@ function ClientPage({ onBack }: { onBack: () => void }) {
 
         {activeRoom ? (
           <section className="card mt-6 p-5">
-            <h2 className="text-sm font-semibold">Submit job</h2>
+            <h2 className="section-title">Submit job</h2>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div>
                 <span className="label">Task type</span>
@@ -727,7 +730,7 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                     type="file"
                     accept=".wgsl,text/plain"
                     onChange={onShaderSelected}
-                    className="text-neutral-600"
+                    className="file-input"
                   />
                   <button
                     type="button"
@@ -737,14 +740,14 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                     Download shade template
                   </button>
                   {shaderFileName ? (
-                    <span className="text-xs text-neutral-900">{shaderFileName} · loaded</span>
+                    <span className="text-xs text-tx-primary">{shaderFileName} · loaded</span>
                   ) : (
-                    <span className="text-xs text-neutral-500">
+                    <span className="text-xs text-tx-muted">
                       Built-in template is used when no file is selected.
                     </span>
                   )}
                 </div>
-                <p className="mt-2 text-xs text-neutral-500">
+                <p className="mt-2 text-xs text-tx-muted">
                   Upload a WGSL file containing only <code>shade(gid, out_idx)</code>.
                 </p>
               </div>
@@ -774,16 +777,16 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                         type="file"
                         accept=".wasm,application/wasm"
                         onChange={onFileSelected}
-                        className="text-neutral-600"
+                        className="file-input"
                       />
                       {fileName ? (
-                        <span className="text-neutral-900">{fileName} · loaded</span>
+                        <span className="text-tx-primary">{fileName} · loaded</span>
                       ) : (
-                        <span className="text-neutral-500">No file selected</span>
+                        <span className="text-tx-muted">No file selected</span>
                       )}
                     </span>
                   ) : (
-                    <span className="text-xs text-neutral-500">Built-in add(i32, i32)</span>
+                    <span className="text-xs text-tx-muted">Built-in add(i32, i32)</span>
                   )}
                 </div>
               </div>
@@ -807,19 +810,19 @@ function ClientPage({ onBack }: { onBack: () => void }) {
             <div className="mt-4">
               <span className="label">Workers</span>
               {activeRoom.workers.length === 0 ? (
-                <p className="text-sm text-neutral-500">No workers connected.</p>
+                <p className="text-sm text-tx-muted">No workers connected.</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {activeRoom.workers.map((worker) => (
                     <label
                       key={worker.id}
-                      className="flex items-center gap-2 rounded-md border border-neutral-200 px-2.5 py-1.5 text-sm"
+                      className="flex items-center gap-2 rounded-sm border border-border-strong px-2.5 py-1.5 text-sm hover:border-accent hover:bg-surface"
                     >
                       <input
                         type="checkbox"
                         checked={selectedWorkers.has(worker.id)}
                         onChange={() => toggleWorker(worker.id)}
-                        className="h-4 w-4 rounded border-neutral-300"
+                        className="h-4 w-4 rounded-sm border-border-strong accent-accent"
                       />
                       <span className="mono">{worker.id}</span>
                     </label>
@@ -836,7 +839,7 @@ function ClientPage({ onBack }: { onBack: () => void }) {
             >
               {submitting ? 'Submitting...' : 'Submit job'}
             </button>
-            {submitError ? <p className="mt-3 text-sm text-red-600">{submitError}</p> : null}
+            {submitError ? <p className="mt-3 text-sm text-danger">{submitError}</p> : null}
           </section>
         ) : null}
 
@@ -844,8 +847,8 @@ function ClientPage({ onBack }: { onBack: () => void }) {
           <section className="card mt-6 overflow-hidden p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-sm font-semibold">Rendered image</h2>
-                <p className="mt-1 text-xs text-neutral-500">
+                <h2 className="section-title">Rendered image</h2>
+                <p className="mt-1 text-xs text-tx-muted">
                   {renderedFrame.width} × {renderedFrame.height} · saved as {renderedFrame.jobId}-render.png
                 </p>
               </div>
@@ -857,7 +860,7 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                 Download PNG
               </a>
             </div>
-            <div className="mt-4 max-h-[70vh] overflow-auto rounded-md border border-neutral-200 bg-neutral-900 p-2">
+            <div className="mt-4 max-h-[70vh] overflow-auto rounded-sm border border-border bg-canvas p-2">
               <img
                 src={renderedFrame.url}
                 alt="Distributed WebGPU render"
@@ -866,16 +869,16 @@ function ClientPage({ onBack }: { onBack: () => void }) {
             </div>
           </section>
         ) : null}
-        {renderError ? <p className="mt-3 text-sm text-red-600">{renderError}</p> : null}
+        {renderError ? <p className="mt-3 text-sm text-danger">{renderError}</p> : null}
 
         <section className="card mt-6 p-5">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Jobs</h2>
-            <span className="text-xs text-neutral-500">{jobs.length}</span>
+            <h2 className="section-title">Jobs</h2>
+            <span className="text-xs text-tx-muted">{jobs.length}</span>
           </div>
 
           {jobs.length === 0 ? (
-            <p className="text-sm text-neutral-500">No jobs submitted yet.</p>
+            <p className="text-sm text-tx-muted">No jobs submitted yet.</p>
           ) : (
             <div className="space-y-3">
               {jobs.map((record) => (

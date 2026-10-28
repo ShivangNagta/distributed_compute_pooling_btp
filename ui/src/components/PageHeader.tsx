@@ -10,10 +10,10 @@ export function PageHeader({
   children?: ReactNode
 }) {
   return (
-    <header className="flex flex-col gap-3 border-b border-neutral-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+    <header className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <h1 className="text-xl font-semibold text-neutral-900">{title}</h1>
-        <p className="text-sm text-neutral-500">{description}</p>
+        <h1 className="text-2xl font-semibold text-tx-primary">{title}</h1>
+        <p className="mt-1 text-sm text-tx-muted">{description}</p>
       </div>
       {children ? <div className="flex items-center gap-2">{children}</div> : null}
     </header>

@@ -49,13 +49,13 @@ Connect multiple browsers and continuously observe their available resources.
 
 * [x] Create coordinator/server
 * [x] Browser can connect as a worker
-* [ ] Maintain list of active workers
+* [x] Maintain list of active workers
 
 ### Resource information
 
 * [x] Collect CPU information
 * [x] Collect memory information
-* [ ] Detect WebGPU availability
+* [x] Detect WebGPU availability
 * [x] Collect basic GPU information
 * [ ] Send resource information periodically
 * [ ] Update resource information dynamically
@@ -70,22 +70,22 @@ Submit a job to a specific browser and receive the result.
 
 ### Job lifecycle
 
-* [ ] Define basic job representation
-* [ ] Define job states
-* [ ] Implement `Created`
-* [ ] Implement `Submitted`
-* [ ] Implement `Running`
-* [ ] Implement `Completed`
-* [ ] Implement `Failed`
+* [x] Define basic job representation
+* [x] Define job states
+* [x] Implement `Created`
+* [x] Implement `Submitted`
+* [x] Implement `Running`
+* [x] Implement `Completed`
+* [x] Implement `Failed`
 
 ### Submission
 
-* [ ] Submit job from coordinator
+* [x] Submit job from coordinator
 * [ ] Manually select worker
-* [ ] Send job to worker
-* [ ] Execute job
-* [ ] Return result
-* [ ] Display result
+* [x] Send job to worker
+* [x] Execute job
+* [x] Return result
+* [x] Display result
 
 ### Reliability
 
@@ -106,20 +106,20 @@ Define what a CPU job looks like and execute it remotely.
 
 * [ ] Decide CPU job representation
 * [ ] Decide how input is provided
-* [ ] Decide how output is returned
+* [x] Decide how output is returned
 * [ ] Decide how the WebAssembly module is provided
 
 ### Execution
 
-* [ ] Execute WebAssembly module in browser
-* [ ] Pass input to module
-* [ ] Retrieve output
-* [ ] Send output to coordinator
+* [x] Execute WebAssembly module in browser
+* [x] Pass input to module
+* [x] Retrieve output
+* [x] Send output to coordinator
 
 ### Test workloads
 
 * [ ] Vector addition
-* [ ] Numerical computation
+* [x] Numerical computation
 * [ ] Matrix operation
 * [ ] One larger CPU workload
 
@@ -134,10 +134,8 @@ Define and execute GPU jobs using WebGPU/ WGPU.
 
 ### WebGPU exploration
 
-* [ ] Understand WebGPU adapter/device model
+* [x] Dispatch simple WGSL workloads
 * [ ] Understand compute pipelines
-* [ ] Understand buffers
-* [ ] Understand WGSL
 * [ ] Build standalone WebGPU compute example
 
 ### Programming model
@@ -149,15 +147,16 @@ Define and execute GPU jobs using WebGPU/ WGPU.
 
 ### Execution
 
-* [ ] Initialize WebGPU in worker
+* [x] Initialize WebGPU in worker
 * [ ] Create GPU buffers
 * [ ] Upload input
 * [ ] Execute compute shader
-* [ ] Read result
-* [ ] Return result
+* [x] Read result
+* [x] Return result
 
 ### Test workloads
 
+* [x] Single Frame Rendering
 * [ ] Vector addition
 * [ ] Matrix operation
 * [ ] One larger GPU workload
@@ -183,8 +182,8 @@ Understand and test the security boundaries of the system.
 
 ### System security
 
-* [ ] Basic worker authentication
-* [ ] Basic job authentication
+* [x] Basic worker authentication
+* [x] Basic job authentication
 * [ ] Consider malicious job submission
 * [ ] Consider malicious worker results
 * [ ] Consider job tampering

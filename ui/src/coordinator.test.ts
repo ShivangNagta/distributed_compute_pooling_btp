@@ -14,7 +14,10 @@ describe('parseMessage', () => {
   })
 
   it('parses a worker_left message', () => {
-    const raw = JSON.stringify({ type: 'worker_left', payload: { worker_id: 'w-1' } })
+    const raw = JSON.stringify({
+      type: 'worker_left',
+      payload: { worker_id: 'w-1' },
+    })
     const message = parseMessage(raw)
 
     expect(message?.type).toBe('worker_left')

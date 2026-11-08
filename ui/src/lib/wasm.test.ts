@@ -30,6 +30,8 @@ describe('runWasmTask', () => {
   })
 
   it('throws when no wasm file is present', async () => {
-    await expect(runWasmTask({ entry_point: 'add', files: [] }, task([1, 2]))).rejects.toThrow()
+    await expect(
+      runWasmTask({ entry_point: 'add', files: [] }, task([1, 2])),
+    ).rejects.toThrow()
   })
 })

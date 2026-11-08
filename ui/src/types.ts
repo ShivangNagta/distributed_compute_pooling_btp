@@ -1,6 +1,7 @@
 export type WorkerStatus = 'connected' | 'busy' | 'disconnected'
 export type JobStatus = 'created' | 'running' | 'completed' | 'failed'
-export type TaskStatus = 'pending' | 'assigned' | 'running' | 'completed' | 'failed'
+export type TaskStatus =
+  'pending' | 'assigned' | 'running' | 'completed' | 'failed'
 
 export interface GpuInformation {
   vendor?: string | null

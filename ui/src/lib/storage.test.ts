@@ -66,7 +66,12 @@ describe('storage', () => {
 
   it('round-trips joined rooms', () => {
     const rooms: StoredJoinedRoom[] = [
-      { roomId: 'r1', roomToken: 't1', status: 'connected', capabilities: null },
+      {
+        roomId: 'r1',
+        roomToken: 't1',
+        status: 'connected',
+        capabilities: null,
+      },
     ]
 
     saveWorkerRooms(rooms)
@@ -89,12 +94,16 @@ describe('storage', () => {
   it('keeps each tab isolated', () => {
     const tabA = makeStorage()
     vi.stubGlobal('sessionStorage', tabA)
-    saveClientRooms([{ id: 'room-a', clientToken: 'ca', workerToken: 'wa', workers: [] }])
+    saveClientRooms([
+      { id: 'room-a', clientToken: 'ca', workerToken: 'wa', workers: [] },
+    ])
 
     const tabB = makeStorage()
     vi.stubGlobal('sessionStorage', tabB)
     expect(loadClientRooms()).toEqual([])
-    saveClientRooms([{ id: 'room-b', clientToken: 'cb', workerToken: 'wb', workers: [] }])
+    saveClientRooms([
+      { id: 'room-b', clientToken: 'cb', workerToken: 'wb', workers: [] },
+    ])
 
     vi.stubGlobal('sessionStorage', tabA)
     expect(loadClientRooms().map((room) => room.id)).toEqual(['room-a'])

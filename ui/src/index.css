@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
   --color-base: #dcdcdc;
@@ -18,10 +18,12 @@
 
   --color-danger: #8a4b4b;
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    "Liberation Mono", monospace;
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    monospace;
 
   --text-xs: 0.8125rem;
   --text-xs--line-height: 1.4;
@@ -50,14 +52,14 @@
   }
 
   button:not(:disabled),
-  [role="button"],
+  [role='button'],
   a[href],
   label,
   select,
   summary,
-  input[type="checkbox"],
-  input[type="radio"],
-  input[type="file"] {
+  input[type='checkbox'],
+  input[type='radio'],
+  input[type='file'] {
     cursor: pointer;
   }
 

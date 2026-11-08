@@ -16,7 +16,11 @@ function job(id: string, status: Job['status'] = 'created'): Job {
   }
 }
 
-function task(id: string, jobId: string, status: Task['status'] = 'pending'): Task {
+function task(
+  id: string,
+  jobId: string,
+  status: Task['status'] = 'pending',
+): Task {
   return {
     id,
     job_id: jobId,

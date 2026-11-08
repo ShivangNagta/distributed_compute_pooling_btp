@@ -40,7 +40,10 @@ export function upsertTask(jobs: JobRecord[], task: Task): JobRecord[] {
   if (jobs.some((record) => record.job.id === task.job_id)) {
     return jobs.map((record) =>
       record.job.id === task.job_id
-        ? { job: record.job, tasks: [task, ...record.tasks.filter((t) => t.id !== task.id)] }
+        ? {
+            job: record.job,
+            tasks: [task, ...record.tasks.filter((t) => t.id !== task.id)],
+          }
         : record,
     )
   }

@@ -23,7 +23,11 @@ function ModeCard({
   )
 }
 
-function HomePage({ onSelectMode }: { onSelectMode: (mode: 'client' | 'worker') => void }) {
+function HomePage({
+  onSelectMode,
+}: {
+  onSelectMode: (mode: 'client' | 'worker') => void
+}) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-base px-4 py-8 text-tx-primary">
       <div className="w-full max-w-xl">
@@ -80,7 +84,11 @@ function App() {
   }
 
   const onSelectMode = (nextMode: 'client' | 'worker') => {
-    window.history.pushState({}, '', nextMode === 'client' ? '/client' : '/worker')
+    window.history.pushState(
+      {},
+      '',
+      nextMode === 'client' ? '/client' : '/worker',
+    )
     setMode(nextMode)
   }
 

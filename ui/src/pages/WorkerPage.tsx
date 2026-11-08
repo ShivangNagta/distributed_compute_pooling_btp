@@ -6,7 +6,11 @@ import { StatusBadge } from '../components/StatusBadge'
 import { coordinatorWsUrl, parseMessage } from '../coordinator'
 import { runTask } from '../lib/wasm'
 import { statusTone, taskStatusTone } from '../lib/status'
-import { loadWorkerRooms, saveWorkerRooms, type StoredJoinedRoom } from '../lib/storage'
+import {
+  loadWorkerRooms,
+  saveWorkerRooms,
+  type StoredJoinedRoom,
+} from '../lib/storage'
 import type { Artifact, Capabilities, TaskStatus } from '../types'
 
 type WorkerActivity = {
@@ -80,7 +84,9 @@ async function handleWorkerMessage(
     }
 
     onActivity(base)
-    socket.send(JSON.stringify({ type: 'task_started', payload: { task_id: task.id } }))
+    socket.send(
+      JSON.stringify({ type: 'task_started', payload: { task_id: task.id } }),
+    )
     onActivity({ ...base, status: 'running' })
 
     try {
@@ -105,14 +111,21 @@ async function handleWorkerMessage(
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'execution failed'
       socket.send(
-        JSON.stringify({ type: 'task_failed', payload: { task_id: task.id, error: reason } }),
+        JSON.stringify({
+          type: 'task_failed',
+          payload: { task_id: task.id, error: reason },
+        }),
       )
       onActivity({ ...base, status: 'failed', error: reason })
     }
   }
 }
 
-const JoinedRoomCard = memo(function JoinedRoomCard({ room }: { room: StoredJoinedRoom }) {
+const JoinedRoomCard = memo(function JoinedRoomCard({
+  room,
+}: {
+  room: StoredJoinedRoom
+}) {
   return (
     <div className="subcard">
       <div className="flex items-center justify-between gap-2">
@@ -123,7 +136,9 @@ const JoinedRoomCard = memo(function JoinedRoomCard({ room }: { room: StoredJoin
       <div className="mt-2 flex items-center justify-between gap-3">
         <span className="text-sm text-tx-secondary">Room token</span>
         <div className="flex min-w-0 items-center gap-2">
-          <code className="mono truncate text-tx-primary">{room.roomToken}</code>
+          <code className="mono truncate text-tx-primary">
+            {room.roomToken}
+          </code>
           <CopyButton value={room.roomToken} />
         </div>
       </div>
@@ -133,14 +148,20 @@ const JoinedRoomCard = memo(function JoinedRoomCard({ room }: { room: StoredJoin
   )
 })
 
-const ActivityCard = memo(function ActivityCard({ activity }: { activity: WorkerActivity }) {
+const ActivityCard = memo(function ActivityCard({
+  activity,
+}: {
+  activity: WorkerActivity
+}) {
   return (
     <div className="subcard">
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium text-tx-primary">
           Task {activity.taskId.slice(0, 8)}
         </span>
-        <StatusBadge tone={taskStatusTone(activity.status)}>{activity.status}</StatusBadge>
+        <StatusBadge tone={taskStatusTone(activity.status)}>
+          {activity.status}
+        </StatusBadge>
       </div>
 
       <dl className="mt-3 space-y-1.5 text-sm">
@@ -156,12 +177,16 @@ const ActivityCard = memo(function ActivityCard({ activity }: { activity: Worker
         </div>
         <div className="flex items-center justify-between gap-3">
           <dt className="text-tx-muted">Input</dt>
-          <dd className="mono text-tx-primary">{JSON.stringify(activity.input)}</dd>
+          <dd className="mono text-tx-primary">
+            {JSON.stringify(activity.input)}
+          </dd>
         </div>
         {activity.status === 'completed' && (
           <div className="flex items-center justify-between gap-3">
             <dt className="text-tx-muted">Result</dt>
-            <dd className="mono text-tx-primary">{JSON.stringify(activity.result)}</dd>
+            <dd className="mono text-tx-primary">
+              {JSON.stringify(activity.result)}
+            </dd>
           </div>
         )}
         {activity.error && (
@@ -186,8 +211,12 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
   const artifactsRef = useRef<Map<string, Artifact>>(new Map())
   const [roomIdInput, setRoomIdInput] = useState('')
   const [roomTokenInput, setRoomTokenInput] = useState('')
-  const [joinedRooms, setJoinedRooms] = useState<StoredJoinedRoom[]>(() => loadWorkerRooms())
-  const [status, setStatus] = useState('Join a room to start contributing resources.')
+  const [joinedRooms, setJoinedRooms] = useState<StoredJoinedRoom[]>(() =>
+    loadWorkerRooms(),
+  )
+  const [status, setStatus] = useState(
+    'Join a room to start contributing resources.',
+  )
   const [isJoining, setIsJoining] = useState(false)
   const [activities, setActivities] = useState<WorkerActivity[]>([])
 
@@ -229,38 +258,55 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
 
       socket.onopen = async () => {
         const capabilities = await getCapabilities()
-        socket.send(JSON.stringify({ type: 'capabilities', payload: capabilities }))
+        socket.send(
+          JSON.stringify({ type: 'capabilities', payload: capabilities }),
+        )
         setJoinedRooms((current) =>
           upsertRoom(current, roomId, roomToken, 'connected', capabilities),
         )
-        setStatus(`Connected to room ${roomId}. Your resources are now visible to the client.`)
+        setStatus(
+          `Connected to room ${roomId}. Your resources are now visible to the client.`,
+        )
       }
 
       socket.onmessage = (event) => {
-        void handleWorkerMessage(socket, event.data, artifactsRef.current, (activity) => {
-          setActivities((current) => [
-            activity,
-            ...current.filter((item) => item.taskId !== activity.taskId),
-          ])
-        })
+        void handleWorkerMessage(
+          socket,
+          event.data,
+          artifactsRef.current,
+          (activity) => {
+            setActivities((current) => [
+              activity,
+              ...current.filter((item) => item.taskId !== activity.taskId),
+            ])
+          },
+        )
       }
 
       socket.onerror = () => {
-        setStatus('Could not connect to that room. Check the room ID and room token and try again.')
-        setJoinedRooms((current) => upsertRoom(current, roomId, roomToken, 'error', null))
+        setStatus(
+          'Could not connect to that room. Check the room ID and room token and try again.',
+        )
+        setJoinedRooms((current) =>
+          upsertRoom(current, roomId, roomToken, 'error', null),
+        )
       }
 
       socket.onclose = () => {
         setJoinedRooms((current) =>
           current.map((room) =>
             room.roomId === roomId && room.roomToken === roomToken
-              ? { ...room, status: room.status === 'error' ? 'error' : 'disconnected' }
+              ? {
+                  ...room,
+                  status: room.status === 'error' ? 'error' : 'disconnected',
+                }
               : room,
           ),
         )
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to join room.'
+      const message =
+        error instanceof Error ? error.message : 'Unable to join room.'
       setStatus(message)
     } finally {
       setIsJoining(false)
@@ -270,7 +316,10 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
   return (
     <main className="min-h-screen bg-base text-tx-primary">
       <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
-        <PageHeader title="Worker" description="Join a room and contribute your resources.">
+        <PageHeader
+          title="Worker"
+          description="Join a room and contribute your resources."
+        >
           <button type="button" onClick={onBack} className="btn btn-secondary">
             Back
           </button>
@@ -315,13 +364,17 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
               {isJoining ? 'Joining...' : 'Join room'}
             </button>
 
-            {status ? <p className="mt-4 text-sm text-tx-muted">{status}</p> : null}
+            {status ? (
+              <p className="mt-4 text-sm text-tx-muted">{status}</p>
+            ) : null}
           </section>
 
           <section className="card p-5">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="section-title">Joined rooms</h2>
-              <span className="text-xs text-tx-muted">{joinedRooms.length}</span>
+              <span className="text-xs text-tx-muted">
+                {joinedRooms.length}
+              </span>
             </div>
 
             {joinedRooms.length === 0 ? (
@@ -329,7 +382,10 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
             ) : (
               <div className="space-y-3">
                 {joinedRooms.map((room) => (
-                  <JoinedRoomCard key={`${room.roomId}-${room.roomToken}`} room={room} />
+                  <JoinedRoomCard
+                    key={`${room.roomId}-${room.roomToken}`}
+                    room={room}
+                  />
                 ))}
               </div>
             )}
@@ -344,7 +400,8 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
 
           {activities.length === 0 ? (
             <p className="text-sm text-tx-muted">
-              No jobs yet. Assigned tasks appear here with what was received and the result.
+              No jobs yet. Assigned tasks appear here with what was received and
+              the result.
             </p>
           ) : (
             <div className="space-y-3">

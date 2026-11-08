@@ -1,7 +1,8 @@
 import type { Message } from './types'
 
 export const COORDINATOR_URL: string =
-  (import.meta.env.VITE_COORDINATOR_URL as string | undefined) ?? 'http://localhost:3000'
+  (import.meta.env.VITE_COORDINATOR_URL as string | undefined) ??
+  'http://localhost:3000'
 
 export function coordinatorWsUrl(path: string): string {
   return `${COORDINATOR_URL.replace(/^http/, 'ws')}${path}`

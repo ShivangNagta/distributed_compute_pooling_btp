@@ -9,7 +9,10 @@ export type TaskOutcome = {
   execution_time_ms: number
 }
 
-export async function runTask(artifact: Artifact, task: Task): Promise<TaskOutcome> {
+export async function runTask(
+  artifact: Artifact,
+  task: Task,
+): Promise<TaskOutcome> {
   if (artifact.kind === 'shader_compute') {
     return runWgpuTask(artifact, task)
   }
@@ -21,7 +24,10 @@ type WgpuWorkerModule = {
   execute_shader: (shader: string, input: unknown) => Promise<unknown>
 }
 
-async function runWgpuTask(artifact: Artifact, task: Task): Promise<TaskOutcome> {
+async function runWgpuTask(
+  artifact: Artifact,
+  task: Task,
+): Promise<TaskOutcome> {
   const shaderFile = artifact.files.find((file) => file.name.endsWith('.wgsl'))
   if (!shaderFile) {
     throw new Error('shader artifact contains no WGSL file')
@@ -32,10 +38,9 @@ async function runWgpuTask(artifact: Artifact, task: Task): Promise<TaskOutcome>
     throw new Error('VITE_WGPU_WORKER_MODULE_URL is not configured')
   }
 
-  const loadWgpuWorkerModule = new Function(
-    'url',
-    'return import(url)',
-  ) as (url: string) => Promise<WgpuWorkerModule>
+  const loadWgpuWorkerModule = new Function('url', 'return import(url)') as (
+    url: string,
+  ) => Promise<WgpuWorkerModule>
 
   const module = await loadWgpuWorkerModule(
     new URL(moduleUrl, window.location.origin).href,
@@ -52,7 +57,10 @@ async function runWgpuTask(artifact: Artifact, task: Task): Promise<TaskOutcome>
 
 /// Instantiates the wasm file in the artifact and calls `entry_point` with the
 /// task input (a positional argument list).
-export async function runWasmTask(artifact: Artifact, task: Task): Promise<TaskOutcome> {
+export async function runWasmTask(
+  artifact: Artifact,
+  task: Task,
+): Promise<TaskOutcome> {
   const wasmFile =
     artifact.files.find((file) => file.mime === 'application/wasm') ??
     artifact.files.find((file) => file.name.endsWith('.wasm'))
@@ -64,7 +72,9 @@ export async function runWasmTask(artifact: Artifact, task: Task): Promise<TaskO
   const instance = new WebAssembly.Instance(
     new WebAssembly.Module(base64ToBytes(wasmFile.content)),
   )
-  const entry = (instance.exports as Record<string, unknown>)[artifact.entry_point]
+  const entry = (instance.exports as Record<string, unknown>)[
+    artifact.entry_point
+  ]
 
   if (typeof entry !== 'function') {
     throw new Error(`export "${artifact.entry_point}" not found`)

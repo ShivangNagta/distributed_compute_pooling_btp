@@ -2,11 +2,16 @@ import type { Capabilities } from '../types'
 
 function formatValue(value: unknown) {
   if (value === null || value === undefined || value === '') return 'N/A'
-  if (typeof value === 'number') return Number.isInteger(value) ? `${value}` : value.toFixed(1)
+  if (typeof value === 'number')
+    return Number.isInteger(value) ? `${value}` : value.toFixed(1)
   return String(value)
 }
 
-export function CapabilityList({ capabilities }: { capabilities: Capabilities | null }) {
+export function CapabilityList({
+  capabilities,
+}: {
+  capabilities: Capabilities | null
+}) {
   const caps = capabilities
   return (
     <dl className="mt-3 space-y-1.5 text-sm">

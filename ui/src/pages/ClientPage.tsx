@@ -1,10 +1,22 @@
-﻿import { memo, useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
+﻿import {
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from 'react'
 import { CapabilityList } from '../components/CapabilityList'
 import { CopyButton } from '../components/CopyButton'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { COORDINATOR_URL, coordinatorWsUrl, parseMessage } from '../coordinator'
-import { addJobIfMissing, upsertJob, upsertTask, type JobRecord } from '../lib/jobs'
+import {
+  addJobIfMissing,
+  upsertJob,
+  upsertTask,
+  type JobRecord,
+} from '../lib/jobs'
 import { sampleArtifact } from '../lib/sample'
 import { downloadShaderTemplate, SHADER_TEMPLATE } from '../lib/shaderTemplate'
 import { jobStatusTone, statusTone, taskStatusTone } from '../lib/status'
@@ -38,19 +50,33 @@ async function composeImage(
   canvas.height = height
   const context = canvas.getContext('2d')
   if (!context) throw new Error('Unable to create a 2D canvas context.')
-  context.putImageData(new ImageData(new Uint8ClampedArray(bytes), width, height), 0, 0)
+  context.putImageData(
+    new ImageData(new Uint8ClampedArray(bytes), width, height),
+    0,
+    0,
+  )
   const blob = await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob((value) => value ? resolve(value) : reject(new Error('Unable to encode the rendered image as PNG.')), 'image/png')
+    canvas.toBlob(
+      (value) =>
+        value
+          ? resolve(value)
+          : reject(new Error('Unable to encode the rendered image as PNG.')),
+      'image/png',
+    )
   })
   return { jobId, url: URL.createObjectURL(blob), width, height }
 }
 
-async function composeImageFromTasks(jobId: string, tasks: JobRecord['tasks']): Promise<RenderedFrame> {
+async function composeImageFromTasks(
+  jobId: string,
+  tasks: JobRecord['tasks'],
+): Promise<RenderedFrame> {
   const first = tasks[0]
   if (!first || typeof first.input !== 'object' || first.input === null) {
     throw new Error('Shader task has invalid input.')
   }
-  const resolution = (first.input as { global_resolution?: unknown }).global_resolution
+  const resolution = (first.input as { global_resolution?: unknown })
+    .global_resolution
   if (
     !Array.isArray(resolution) ||
     resolution.length !== 2 ||
@@ -61,14 +87,21 @@ async function composeImageFromTasks(jobId: string, tasks: JobRecord['tasks']): 
   const [width, height] = resolution as [number, number]
   const pixels = new Uint8Array(width * height * 4)
   for (const task of tasks) {
-    if (typeof task.input !== 'object' || task.input === null || typeof task.result !== 'object' || task.result === null) {
+    if (
+      typeof task.input !== 'object' ||
+      task.input === null ||
+      typeof task.result !== 'object' ||
+      task.result === null
+    ) {
       throw new Error('Shader task has invalid result data.')
     }
     const tile = task.input as { offset?: unknown; size?: unknown }
     const result = task.result as { pixels_base64?: unknown }
     if (
-      !Array.isArray(tile.offset) || !Array.isArray(tile.size) ||
-      tile.offset.length !== 2 || tile.size.length !== 2 ||
+      !Array.isArray(tile.offset) ||
+      !Array.isArray(tile.size) ||
+      tile.offset.length !== 2 ||
+      tile.size.length !== 2 ||
       !tile.offset.every((value) => Number.isInteger(value)) ||
       !tile.size.every((value) => Number.isInteger(value) && value > 0) ||
       typeof result.pixels_base64 !== 'string'
@@ -123,7 +156,9 @@ function TokenRow({ label, value }: { label: string; value: string }) {
     <div className="flex items-start justify-between gap-3 py-2">
       <div className="min-w-0">
         <div className="text-sm text-tx-secondary">{label}</div>
-        <code className="mono mt-0.5 block break-all text-tx-primary">{value}</code>
+        <code className="mono mt-0.5 block break-all text-tx-primary">
+          {value}
+        </code>
       </div>
       <CopyButton value={value} />
     </div>
@@ -135,7 +170,9 @@ const WorkerCard = memo(function WorkerCard({ worker }: { worker: Worker }) {
     <div className="subcard">
       <div className="flex items-center justify-between gap-2">
         <span className="mono truncate text-tx-primary">{worker.id}</span>
-        <StatusBadge tone={statusTone(worker.status)}>{worker.status}</StatusBadge>
+        <StatusBadge tone={statusTone(worker.status)}>
+          {worker.status}
+        </StatusBadge>
       </div>
       <CapabilityList capabilities={worker.capabilities} />
     </div>
@@ -148,8 +185,12 @@ const JobCard = memo(function JobCard({ record }: { record: JobRecord }) {
   return (
     <div className="subcard">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-tx-primary">{record.job.name}</span>
-        <StatusBadge tone={jobStatusTone(record.job.status)}>{record.job.status}</StatusBadge>
+        <span className="text-sm font-medium text-tx-primary">
+          {record.job.name}
+        </span>
+        <StatusBadge tone={jobStatusTone(record.job.status)}>
+          {record.job.status}
+        </StatusBadge>
       </div>
       <div className="mono mt-1 text-xs text-tx-muted">{record.job.id}</div>
 
@@ -160,9 +201,13 @@ const JobCard = memo(function JobCard({ record }: { record: JobRecord }) {
           record.tasks.map((task) => (
             <div key={task.id} className="tile text-sm">
               <div className="flex items-center justify-between gap-2">
-                <span className="mono truncate text-tx-secondary">{task.worker_id ?? 'unassigned'}</span>
+                <span className="mono truncate text-tx-secondary">
+                  {task.worker_id ?? 'unassigned'}
+                </span>
                 {showTaskStatus ? (
-                  <StatusBadge tone={taskStatusTone(task.status)}>{task.status}</StatusBadge>
+                  <StatusBadge tone={taskStatusTone(task.status)}>
+                    {task.status}
+                  </StatusBadge>
                 ) : null}
               </div>
               <div className="mt-1 break-words text-tx-primary">
@@ -173,7 +218,9 @@ const JobCard = memo(function JobCard({ record }: { record: JobRecord }) {
                       ? 'GPU tile rendered'
                       : `Tile ${task.status}`
                     : `Result: ${task.result === undefined ? 'pending' : JSON.stringify(task.result)}`}
-                {task.execution_time_ms != null ? ` · ${task.execution_time_ms} ms` : ''}
+                {task.execution_time_ms != null
+                  ? ` · ${task.execution_time_ms} ms`
+                  : ''}
               </div>
             </div>
           ))
@@ -187,7 +234,9 @@ function ClientPage({ onBack }: { onBack: () => void }) {
   const socketByRoom = useRef<Record<string, WebSocket>>({})
   const [initialRooms] = useState<StoredRoom[]>(() => loadClientRooms())
   const [rooms, setRooms] = useState<StoredRoom[]>(initialRooms)
-  const [activeRoomId, setActiveRoomId] = useState<string | null>(() => loadActiveRoomId())
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(() =>
+    loadActiveRoomId(),
+  )
   const [isCreating, setIsCreating] = useState(false)
   const [status, setStatus] = useState(() =>
     initialRooms.length > 0
@@ -239,7 +288,8 @@ function ClientPage({ onBack }: { onBack: () => void }) {
     socketByRoom.current[room.id] = socket
 
     socket.onopen = () => setStatus(`Connected to room ${room.id}.`)
-    socket.onerror = () => setError(`WebSocket connection for room ${room.id} failed.`)
+    socket.onerror = () =>
+      setError(`WebSocket connection for room ${room.id} failed.`)
     socket.onclose = () => {
       delete socketByRoom.current[room.id]
     }
@@ -268,7 +318,10 @@ function ClientPage({ onBack }: { onBack: () => void }) {
         setRooms((current) =>
           current.map((item) =>
             item.id === room.id
-              ? { ...item, workers: item.workers.filter((w) => w.id !== workerId) }
+              ? {
+                  ...item,
+                  workers: item.workers.filter((w) => w.id !== workerId),
+                }
               : item,
           ),
         )
@@ -304,7 +357,9 @@ function ClientPage({ onBack }: { onBack: () => void }) {
         item.tasks.every((task) => task.status === 'completed'),
     )
     if (!record || record.job.id === renderedFrame?.jobId) {
-      return () => { cancelled = true }
+      return () => {
+        cancelled = true
+      }
     }
     void composeImageFromTasks(record.job.id, record.tasks)
       .then((frame) => {
@@ -328,7 +383,9 @@ function ClientPage({ onBack }: { onBack: () => void }) {
           )
         }
       })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [jobs, renderedFrame?.jobId])
 
   const createRoom = async () => {
@@ -337,7 +394,9 @@ function ClientPage({ onBack }: { onBack: () => void }) {
     setStatus('Creating room...')
 
     try {
-      const response = await fetch(`${COORDINATOR_URL}/create_room`, { method: 'POST' })
+      const response = await fetch(`${COORDINATOR_URL}/create_room`, {
+        method: 'POST',
+      })
       if (!response.ok) {
         throw new Error(`Room creation failed (${response.status})`)
       }
@@ -363,14 +422,18 @@ function ClientPage({ onBack }: { onBack: () => void }) {
       }
 
       setRooms((current) =>
-        current.some((room) => room.id === roomId) ? current : [nextRoom, ...current],
+        current.some((room) => room.id === roomId)
+          ? current
+          : [nextRoom, ...current],
       )
       setActiveRoomId(roomId)
       connectClientSocket(nextRoom)
       setStatus(`Room ${roomId} created successfully.`)
     } catch (requestError) {
       const message =
-        requestError instanceof Error ? requestError.message : 'Unable to create room.'
+        requestError instanceof Error
+          ? requestError.message
+          : 'Unable to create room.'
       setError(message)
       setStatus(message)
     } finally {
@@ -435,7 +498,8 @@ function ClientPage({ onBack }: { onBack: () => void }) {
       setShaderFileName(file.name)
       setSubmitError(null)
     }
-    reader.onerror = () => setSubmitError('Could not read the selected shader file.')
+    reader.onerror = () =>
+      setSubmitError('Could not read the selected shader file.')
     reader.readAsText(file)
   }
 
@@ -449,12 +513,16 @@ function ClientPage({ onBack }: { onBack: () => void }) {
       }
 
       const name = jobName.trim() || 'job'
-      const connectedWorkerIds = new Set(activeRoom.workers.map((worker) => worker.id))
+      const connectedWorkerIds = new Set(
+        activeRoom.workers.map((worker) => worker.id),
+      )
       const workerIds = [...selectedWorkers].filter((workerId) =>
         connectedWorkerIds.has(workerId),
       )
       if (workerIds.length === 0) {
-        throw new Error('Selected workers are no longer connected. Select an active worker.')
+        throw new Error(
+          'Selected workers are no longer connected. Select an active worker.',
+        )
       }
 
       let requestBody: object
@@ -462,17 +530,26 @@ function ClientPage({ onBack }: { onBack: () => void }) {
       if (jobType === 'wgpu') {
         const width = Number(renderWidth)
         const height = Number(renderHeight)
-        if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
+        if (
+          !Number.isInteger(width) ||
+          !Number.isInteger(height) ||
+          width < 1 ||
+          height < 1
+        ) {
           throw new Error('Render width and height must be positive integers.')
         }
         artifact = {
           entry_point: 'main',
           kind: 'shader_compute',
-          files: [{
-            name: shaderFileName ?? 'shader.wgsl',
-            content: bytesToBase64(new TextEncoder().encode(shaderSource ?? SHADER_TEMPLATE)),
-            mime: 'text/wgsl',
-          }],
+          files: [
+            {
+              name: shaderFileName ?? 'shader.wgsl',
+              content: bytesToBase64(
+                new TextEncoder().encode(shaderSource ?? SHADER_TEMPLATE),
+              ),
+              mime: 'text/wgsl',
+            },
+          ],
         }
         requestBody = {
           name,
@@ -491,7 +568,8 @@ function ClientPage({ onBack }: { onBack: () => void }) {
           throw new Error('Input must be a JSON array of arguments.')
         }
 
-        const content = source === 'sample' ? sampleArtifact().files[0].content : wasmBase64
+        const content =
+          source === 'sample' ? sampleArtifact().files[0].content : wasmBase64
         if (!content) {
           throw new Error('Choose a wasm module or use the sample.')
         }
@@ -510,17 +588,14 @@ function ClientPage({ onBack }: { onBack: () => void }) {
 
       setSubmitting(true)
       const submitPath = `/room/${encodeURIComponent(activeRoom.id)}/job/submit`
-      const response = await fetch(
-        `${COORDINATOR_URL}${submitPath}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${activeRoom.clientToken}`,
-          },
-          body: JSON.stringify(requestBody),
+      const response = await fetch(`${COORDINATOR_URL}${submitPath}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${activeRoom.clientToken}`,
         },
-      )
+        body: JSON.stringify(requestBody),
+      })
 
       const body = (await response.json().catch(() => null)) as {
         job_id?: string
@@ -550,19 +625,25 @@ function ClientPage({ onBack }: { onBack: () => void }) {
       setStatus(`Job ${jobId} submitted.`)
     } catch (submitFailure) {
       setSubmitError(
-        submitFailure instanceof Error ? submitFailure.message : 'Unable to submit job.',
+        submitFailure instanceof Error
+          ? submitFailure.message
+          : 'Unable to submit job.',
       )
     } finally {
       setSubmitting(false)
     }
   }
 
-  const activeRoom = rooms.find((room) => room.id === activeRoomId) ?? rooms[0] ?? null
+  const activeRoom =
+    rooms.find((room) => room.id === activeRoomId) ?? rooms[0] ?? null
 
   return (
     <main className="min-h-screen bg-base text-tx-primary">
       <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-        <PageHeader title="Client" description="Create a room and monitor connected workers.">
+        <PageHeader
+          title="Client"
+          description="Create a room and monitor connected workers."
+        >
           <button
             type="button"
             onClick={createRoom}
@@ -584,7 +665,9 @@ function ClientPage({ onBack }: { onBack: () => void }) {
             </div>
 
             {rooms.length === 0 ? (
-              <p className="text-sm text-tx-muted">No rooms yet. Create one to get started.</p>
+              <p className="text-sm text-tx-muted">
+                No rooms yet. Create one to get started.
+              </p>
             ) : (
               <ul className="space-y-2">
                 {rooms.map((room) => {
@@ -624,17 +707,29 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                 <h2 className="section-title">Active room</h2>
                 <div className="mt-2 divide-y divide-border border-t border-border">
                   <TokenRow label="Room ID" value={activeRoom.id} />
-                  <TokenRow label="Worker token" value={activeRoom.workerToken} />
-                  <TokenRow label="Client token" value={activeRoom.clientToken} />
+                  <TokenRow
+                    label="Worker token"
+                    value={activeRoom.workerToken}
+                  />
+                  <TokenRow
+                    label="Client token"
+                    value={activeRoom.clientToken}
+                  />
                 </div>
 
-                {status ? <p className="mt-4 text-sm text-tx-muted">{status}</p> : null}
-                {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
+                {status ? (
+                  <p className="mt-4 text-sm text-tx-muted">{status}</p>
+                ) : null}
+                {error ? (
+                  <p className="mt-2 text-sm text-danger">{error}</p>
+                ) : null}
 
                 <div className="mt-6">
                   <div className="mb-3 flex items-center justify-between">
                     <h3 className="section-title">Workers</h3>
-                    <span className="text-xs text-tx-muted">{activeRoom.workers.length}</span>
+                    <span className="text-xs text-tx-muted">
+                      {activeRoom.workers.length}
+                    </span>
                   </div>
 
                   {activeRoom.workers.length === 0 ? (
@@ -693,31 +788,49 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                   placeholder="add"
                 />
               </div>
-              {jobType === 'wasm' ? <div>
-                <label className="label" htmlFor="entry-point">
-                  Entry point
-                </label>
-                <input
-                  id="entry-point"
-                  className="input"
-                  value={entryPoint}
-                  onChange={(event) => setEntryPoint(event.target.value)}
-                  placeholder="add"
-                />
-              </div> : null}
+              {jobType === 'wasm' ? (
+                <div>
+                  <label className="label" htmlFor="entry-point">
+                    Entry point
+                  </label>
+                  <input
+                    id="entry-point"
+                    className="input"
+                    value={entryPoint}
+                    onChange={(event) => setEntryPoint(event.target.value)}
+                    placeholder="add"
+                  />
+                </div>
+              ) : null}
             </div>
 
             {jobType === 'wgpu' ? (
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="label" htmlFor="render-width">Render width</label>
-                  <input id="render-width" className="input" type="number" min="1"
-                    value={renderWidth} onChange={(event) => setRenderWidth(event.target.value)} />
+                  <label className="label" htmlFor="render-width">
+                    Render width
+                  </label>
+                  <input
+                    id="render-width"
+                    className="input"
+                    type="number"
+                    min="1"
+                    value={renderWidth}
+                    onChange={(event) => setRenderWidth(event.target.value)}
+                  />
                 </div>
                 <div>
-                  <label className="label" htmlFor="render-height">Render height</label>
-                  <input id="render-height" className="input" type="number" min="1"
-                    value={renderHeight} onChange={(event) => setRenderHeight(event.target.value)} />
+                  <label className="label" htmlFor="render-height">
+                    Render height
+                  </label>
+                  <input
+                    id="render-height"
+                    className="input"
+                    type="number"
+                    min="1"
+                    value={renderHeight}
+                    onChange={(event) => setRenderHeight(event.target.value)}
+                  />
                 </div>
               </div>
             ) : null}
@@ -740,7 +853,9 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                     Download shade template
                   </button>
                   {shaderFileName ? (
-                    <span className="text-xs text-tx-primary">{shaderFileName} · loaded</span>
+                    <span className="text-xs text-tx-primary">
+                      {shaderFileName} · loaded
+                    </span>
                   ) : (
                     <span className="text-xs text-tx-muted">
                       Built-in template is used when no file is selected.
@@ -748,7 +863,8 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                   )}
                 </div>
                 <p className="mt-2 text-xs text-tx-muted">
-                  Upload a WGSL file containing only <code>shade(gid, out_idx)</code>.
+                  Upload a WGSL file containing only{' '}
+                  <code>shade(gid, out_idx)</code>.
                 </p>
               </div>
             ) : null}
@@ -780,13 +896,17 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                         className="file-input"
                       />
                       {fileName ? (
-                        <span className="text-tx-primary">{fileName} · loaded</span>
+                        <span className="text-tx-primary">
+                          {fileName} · loaded
+                        </span>
                       ) : (
                         <span className="text-tx-muted">No file selected</span>
                       )}
                     </span>
                   ) : (
-                    <span className="text-xs text-tx-muted">Built-in add(i32, i32)</span>
+                    <span className="text-xs text-tx-muted">
+                      Built-in add(i32, i32)
+                    </span>
                   )}
                 </div>
               </div>
@@ -839,7 +959,9 @@ function ClientPage({ onBack }: { onBack: () => void }) {
             >
               {submitting ? 'Submitting...' : 'Submit job'}
             </button>
-            {submitError ? <p className="mt-3 text-sm text-danger">{submitError}</p> : null}
+            {submitError ? (
+              <p className="mt-3 text-sm text-danger">{submitError}</p>
+            ) : null}
           </section>
         ) : null}
 
@@ -849,7 +971,8 @@ function ClientPage({ onBack }: { onBack: () => void }) {
               <div>
                 <h2 className="section-title">Rendered image</h2>
                 <p className="mt-1 text-xs text-tx-muted">
-                  {renderedFrame.width} × {renderedFrame.height} · saved as {renderedFrame.jobId}-render.png
+                  {renderedFrame.width} × {renderedFrame.height} · saved as{' '}
+                  {renderedFrame.jobId}-render.png
                 </p>
               </div>
               <a
@@ -869,7 +992,9 @@ function ClientPage({ onBack }: { onBack: () => void }) {
             </div>
           </section>
         ) : null}
-        {renderError ? <p className="mt-3 text-sm text-danger">{renderError}</p> : null}
+        {renderError ? (
+          <p className="mt-3 text-sm text-danger">{renderError}</p>
+        ) : null}
 
         <section className="card mt-6 p-5">
           <div className="mb-3 flex items-center justify-between">

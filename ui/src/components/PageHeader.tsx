@@ -15,7 +15,9 @@ export function PageHeader({
         <h1 className="text-2xl font-semibold text-tx-primary">{title}</h1>
         <p className="mt-1 text-sm text-tx-muted">{description}</p>
       </div>
-      {children ? <div className="flex items-center gap-2">{children}</div> : null}
+      {children ? (
+        <div className="flex items-center gap-2">{children}</div>
+      ) : null}
     </header>
   )
 }

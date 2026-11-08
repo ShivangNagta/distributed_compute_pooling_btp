@@ -234,7 +234,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(format!("/room/{}/wasm-job/submit", room.id))
+                    .uri(format!("/room/{}/job/submit", room.id))
                     .header("Authorization", format!("Bearer {}", room.client_token))
                     .header("Content-Type", "application/json")
                     .body(Body::from(body.to_string()))

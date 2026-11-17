@@ -78,8 +78,8 @@ pub async fn submit_job(
     Ok(job)
 }
 
-/// Sends the artifact once per worker, then each task. The client is notified
-/// as tasks move to Assigned and the job moves to Running.
+/// Persists and broadcasts assignment state before sending work to the worker.
+/// This prevents a fast worker result from being overwritten by dispatch.
 async fn dispatch_job(state: &AppState, room_id: &str, job_id: &str) -> Result<(), AppError> {
     let job = state
         .repo
@@ -88,7 +88,7 @@ async fn dispatch_job(state: &AppState, room_id: &str, job_id: &str) -> Result<(
         .ok_or(AppError::NotFound)?;
     let tasks = state.repo.get_tasks_by_job(job_id).await?;
 
-    let mut artifact_sent: Vec<String> = Vec::new();
+    let mut worker_ids: Vec<String> = Vec::new();
     let mut assigned: Vec<Task> = Vec::new();
 
     for task in tasks {
@@ -97,20 +97,9 @@ async fn dispatch_job(state: &AppState, room_id: &str, job_id: &str) -> Result<(
             None => continue,
         };
 
-        if !artifact_sent.contains(&worker_id) {
-            send_to_worker(
-                state,
-                &worker_id,
-                &Message::JobArtifact {
-                    job_id: job_id.to_string(),
-                    artifact: job.artifact.clone(),
-                },
-            )
-            .await;
-            artifact_sent.push(worker_id.clone());
+        if !worker_ids.contains(&worker_id) {
+            worker_ids.push(worker_id);
         }
-
-        send_to_worker(state, &worker_id, &Message::TaskAssign(task.clone())).await;
 
         let mut updated = task;
         updated.status = TaskStatus::Assigned;
@@ -136,6 +125,23 @@ async fn dispatch_job(state: &AppState, room_id: &str, job_id: &str) -> Result<(
     }
     if let Some(updated) = state.repo.get_job(job_id).await? {
         send_to_client(state, &client_token, &Message::JobUpdate(updated)).await;
+    }
+
+    for worker_id in worker_ids {
+        send_to_worker(
+            state,
+            &worker_id,
+            &Message::JobArtifact {
+                job_id: job_id.to_string(),
+                artifact: job.artifact.clone(),
+            },
+        )
+        .await;
+    }
+    for task in &assigned {
+        if let Some(worker_id) = &task.worker_id {
+            send_to_worker(state, worker_id, &Message::TaskAssign(task.clone())).await;
+        }
     }
 
     Ok(())

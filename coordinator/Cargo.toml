@@ -2,6 +2,7 @@
 name = "coordinator"
 version = "0.1.0"
 edition = "2024"
+default-run = "coordinator"
 
 [dependencies]
 base64 = "0.22"
@@ -22,6 +23,7 @@ sqlx = { version = "0.9", default-features = false, features = [
     "migrate",
     "macros",
 ] }
+btp-workloads = { path = "workloads" }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

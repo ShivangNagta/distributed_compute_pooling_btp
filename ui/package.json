@@ -9,7 +9,10 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "oxlint",
-    "test": "vitest run",
+    "benchmark": "tsx src/benchmarks/local-wasm.ts",
+    "benchmark:compare": "tsx src/benchmarks/compare.ts",
+    "benchmark:e2e": "playwright test playwright/remote-wasm.spec.ts",
+    "test": "vitest run src",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -19,6 +22,7 @@
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
@@ -26,6 +30,7 @@
     "@webgpu/types": "^0.1.74",
     "oxlint": "^1.81.0",
     "prettier": "^3.9.10",
+    "tsx": "^4.20.6",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
     "vitest": "^4.0.0"

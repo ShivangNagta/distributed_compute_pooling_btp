@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Task } from '../types'
-import { sampleArtifact } from './sample'
+import { loopArtifact, sampleArtifact } from './sample'
 import { runWasmTask } from './wasm'
 
 function task(input: unknown): Task {
@@ -22,6 +22,11 @@ describe('runWasmTask', () => {
     const outcome = await runWasmTask(sampleArtifact(), task([2, 3]))
     expect(outcome.result).toBe(5)
     expect(outcome.execution_time_ms).toBeGreaterThanOrEqual(0)
+  })
+
+  it('runs the loop module', async () => {
+    const outcome = await runWasmTask(loopArtifact(), task([10]))
+    expect(outcome.result).toBe(149847757)
   })
 
   it('throws when the export is missing', async () => {

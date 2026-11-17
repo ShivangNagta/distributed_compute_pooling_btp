@@ -1,5 +1,7 @@
 ﻿import { useEffect, useState } from 'react'
 import ClientPage from './pages/ClientPage'
+import DevPage from './pages/DevPage'
+import VariancePage from './pages/VariancePage'
 import WorkerPage from './pages/WorkerPage'
 
 function ModeCard({
@@ -25,11 +27,20 @@ function ModeCard({
 
 function HomePage({
   onSelectMode,
+  onOpenDev,
 }: {
   onSelectMode: (mode: 'client' | 'worker') => void
+  onOpenDev: () => void
 }) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-base px-4 py-8 text-tx-primary">
+    <main className="relative flex min-h-screen items-center justify-center bg-base px-4 py-8 text-tx-primary">
+      <button
+        type="button"
+        onClick={onOpenDev}
+        className="btn btn-secondary absolute right-4 top-4"
+      >
+        Developer benchmarks
+      </button>
       <div className="w-full max-w-xl">
         <h1 className="text-3xl font-semibold">Browser Compute Pool</h1>
         <p className="mt-2 text-sm text-tx-secondary">
@@ -53,10 +64,14 @@ function HomePage({
 }
 
 function App() {
-  const [mode, setMode] = useState<'home' | 'client' | 'worker'>(() => {
+  const [mode, setMode] = useState<
+    'home' | 'client' | 'worker' | 'dev' | 'dev-variance'
+  >(() => {
     const path = window.location.pathname
     if (path === '/client') return 'client'
     if (path === '/worker') return 'worker'
+    if (path === '/dev') return 'dev'
+    if (path === '/dev/variance') return 'dev-variance'
     return 'home'
   })
 
@@ -69,6 +84,14 @@ function App() {
       }
       if (path === '/worker') {
         setMode('worker')
+        return
+      }
+      if (path === '/dev') {
+        setMode('dev')
+        return
+      }
+      if (path === '/dev/variance') {
+        setMode('dev-variance')
         return
       }
       setMode('home')
@@ -92,6 +115,16 @@ function App() {
     setMode(nextMode)
   }
 
+  const openDev = () => {
+    window.history.pushState({}, '', '/dev')
+    setMode('dev')
+  }
+
+  const openDevVariance = () => {
+    window.history.pushState({}, '', '/dev/variance')
+    setMode('dev-variance')
+  }
+
   if (mode === 'client') {
     return <ClientPage onBack={goHome} />
   }
@@ -100,7 +133,15 @@ function App() {
     return <WorkerPage onBack={goHome} />
   }
 
-  return <HomePage onSelectMode={onSelectMode} />
+  if (mode === 'dev') {
+    return <DevPage onBack={goHome} onOpenVariance={openDevVariance} />
+  }
+
+  if (mode === 'dev-variance') {
+    return <VariancePage onBack={openDev} />
+  }
+
+  return <HomePage onSelectMode={onSelectMode} onOpenDev={openDev} />
 }
 
 export default App

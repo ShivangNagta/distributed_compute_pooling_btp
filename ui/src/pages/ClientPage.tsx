@@ -17,7 +17,7 @@ import {
   upsertTask,
   type JobRecord,
 } from '../lib/jobs'
-import { sampleArtifact } from '../lib/sample'
+import { loopArtifact, sampleArtifact } from '../lib/sample'
 import { downloadShaderTemplate, SHADER_TEMPLATE } from '../lib/shaderTemplate'
 import { jobStatusTone, statusTone, taskStatusTone } from '../lib/status'
 import {
@@ -248,7 +248,7 @@ function ClientPage({ onBack }: { onBack: () => void }) {
   const [jobs, setJobs] = useState<JobRecord[]>([])
   const [jobName, setJobName] = useState('add')
   const [entryPoint, setEntryPoint] = useState('add')
-  const [source, setSource] = useState<'sample' | 'upload'>('sample')
+  const [source, setSource] = useState<'sample' | 'loop' | 'upload'>('sample')
   const [wasmBase64, setWasmBase64] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
   const [inputText, setInputText] = useState('[1, 2]')
@@ -568,13 +568,18 @@ function ClientPage({ onBack }: { onBack: () => void }) {
           throw new Error('Input must be a JSON array of arguments.')
         }
 
+        const builtInArtifact =
+          source === 'loop' ? loopArtifact() : sampleArtifact()
         const content =
-          source === 'sample' ? sampleArtifact().files[0].content : wasmBase64
+          source === 'upload' ? wasmBase64 : builtInArtifact.files[0].content
         if (!content) {
           throw new Error('Choose a wasm module or use the sample.')
         }
         artifact = {
-          entry_point: entryPoint.trim() || 'add',
+          entry_point:
+            source === 'upload'
+              ? entryPoint.trim() || 'add'
+              : builtInArtifact.entry_point,
           files: [{ name: 'main.wasm', content, mime: 'application/wasm' }],
           kind: 'wasm',
         }
@@ -875,10 +880,25 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setSource('sample')}
+                    onClick={() => {
+                      setSource('sample')
+                      setEntryPoint(sampleArtifact().entry_point)
+                      setInputText('[1, 2]')
+                    }}
                     className={`btn ${source === 'sample' ? 'btn-primary' : 'btn-secondary'}`}
                   >
                     Sample
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSource('loop')
+                      setEntryPoint(loopArtifact().entry_point)
+                      setInputText('[1000000]')
+                    }}
+                    className={`btn ${source === 'loop' ? 'btn-primary' : 'btn-secondary'}`}
+                  >
+                    Xorshift loop
                   </button>
                   <button
                     type="button"

@@ -1,7 +1,9 @@
 import type { Artifact, Task } from '../types'
 
+const viteEnv = (import.meta as ImportMeta & { env?: ImportMetaEnv }).env
+
 export const WGPU_WORKER_MODULE_URL: string =
-  (import.meta.env.VITE_WGPU_WORKER_MODULE_URL as string | undefined) ??
+  viteEnv?.VITE_WGPU_WORKER_MODULE_URL ??
   '/wasm-wgpu-worker/coordinator_wgpu_worker.js'
 
 export type TaskOutcome = {

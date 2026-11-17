@@ -1,3 +1,4 @@
+pub mod dev;
 pub mod job;
 pub mod requests;
 pub mod room;
@@ -20,6 +21,10 @@ pub fn router(state: AppState) -> Router {
 
     Router::new()
         .route("/", get(root))
+        .route(
+            "/dev/benchmarks/native",
+            post(dev::native_benchmarks_handler),
+        )
         .route("/create_room", post(room::create_room_handler))
         .route("/ws/{room_id}/{client_token}", get(room::ws_handler))
         .route(

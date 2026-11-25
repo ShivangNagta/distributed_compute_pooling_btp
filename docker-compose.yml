@@ -1,0 +1,23 @@
+services:
+  coordinator:
+    build: ./coordinator
+    image: browser-compute-pool-coordinator
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_PATH: /data/coordinator.db
+    volumes:
+      - coordinator-data:/data
+    restart: unless-stopped
+
+  ui:
+    build: ./ui
+    image: browser-compute-pool-ui
+    ports:
+      - "8080:8080"
+    depends_on:
+      - coordinator
+    restart: unless-stopped
+
+volumes:
+  coordinator-data:

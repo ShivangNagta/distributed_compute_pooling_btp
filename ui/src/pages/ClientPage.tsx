@@ -28,7 +28,12 @@ import {
   type JobRecord,
 } from '../lib/jobs'
 import { sampleArtifact } from '../lib/sample'
-import { downloadShaderTemplate, SHADER_TEMPLATE } from '../lib/shaderTemplate'
+import {
+  downloadImageProcessingShaderTemplate,
+  downloadShaderTemplate,
+  IMAGE_PROCESSING_SHADER_TEMPLATE,
+  SHADER_TEMPLATE,
+} from '../lib/shaderTemplate'
 import { jobStatusTone, statusTone, taskStatusTone } from '../lib/status'
 import {
   buildTaskInputs,
@@ -239,7 +244,7 @@ const JobCard = memo(function JobCard({
                   ? `Error: ${task.error}`
                   : isWgpu
                     ? task.status === 'completed'
-                      ? 'GPU tile rendered'
+                      ? 'GPU tile processed'
                       : `Tile ${task.status}`
                     : `Result: ${task.result === undefined ? 'pending' : JSON.stringify(task.result)}`}
                 {task.execution_time_ms != null
@@ -409,10 +414,24 @@ function ClientPage({ onBack }: { onBack: () => void }) {
   const [inputText, setInputText] = useState('[1, 2]')
   const [selectedWorkers, setSelectedWorkers] = useState<Set<string>>(new Set())
   const [jobType, setJobType] = useState<'wasm' | 'wgpu'>('wasm')
+  const [wgpuMode, setWgpuMode] = useState<'fragment' | 'image_processing'>(
+    'fragment',
+  )
   const [renderWidth, setRenderWidth] = useState('800')
   const [renderHeight, setRenderHeight] = useState('600')
   const [shaderSource, setShaderSource] = useState<string | null>(null)
   const [shaderFileName, setShaderFileName] = useState<string | null>(null)
+  const [inputImageBase64, setInputImageBase64] = useState<string | null>(null)
+  const [inputImageFileName, setInputImageFileName] = useState<string | null>(
+    null,
+  )
+  const [inputImageMime, setInputImageMime] = useState<string | null>(null)
+  const [imageShaderSource, setImageShaderSource] = useState<string | null>(
+    null,
+  )
+  const [imageShaderFileName, setImageShaderFileName] = useState<string | null>(
+    null,
+  )
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [renderedFrame, setRenderedFrame] = useState<RenderedFrame | null>(null)
@@ -651,6 +670,10 @@ function ClientPage({ onBack }: { onBack: () => void }) {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    if (!file.name.toLowerCase().endsWith('.wgsl')) {
+      setSubmitError('Choose a .wgsl shader file.')
+      return
+    }
     if (file.size === 0) {
       setSubmitError('The selected shader file is empty.')
       return
@@ -665,6 +688,70 @@ function ClientPage({ onBack }: { onBack: () => void }) {
       }
       setShaderSource(source)
       setShaderFileName(file.name)
+      setSubmitError(null)
+    }
+    reader.onerror = () =>
+      setSubmitError('Could not read the selected shader file.')
+    reader.readAsText(file)
+  }
+
+  const onImageSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    const supportedExtension = /\.(png|jpe?g|webp)$/i.test(file.name)
+    const supportedMime = ['image/png', 'image/jpeg', 'image/webp'].includes(
+      file.type,
+    )
+    if (!supportedExtension && !supportedMime) {
+      setSubmitError('Choose a PNG, JPEG, or WebP image.')
+      return
+    }
+    if (file.size === 0) {
+      setSubmitError('The selected image is empty.')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const url = typeof reader.result === 'string' ? reader.result : null
+      const base64 = url?.slice(url.indexOf(',') + 1)
+      if (!base64) {
+        setSubmitError('Could not read the selected image.')
+        return
+      }
+      setInputImageBase64(base64)
+      setInputImageFileName(file.name)
+      setInputImageMime(file.type || null)
+      setSubmitError(null)
+    }
+    reader.onerror = () => setSubmitError('Could not read the selected image.')
+    reader.readAsDataURL(file)
+  }
+
+  const onImageShaderSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.wgsl')) {
+      setSubmitError('Choose a .wgsl shader file.')
+      return
+    }
+    if (file.size === 0) {
+      setSubmitError('The selected shader file is empty.')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const source = typeof reader.result === 'string' ? reader.result : null
+      if (!source?.trim()) {
+        setSubmitError('Could not read the selected shader file.')
+        return
+      }
+      setImageShaderSource(source)
+      setImageShaderFileName(file.name)
       setSubmitError(null)
     }
     reader.onerror = () =>
@@ -694,34 +781,68 @@ function ClientPage({ onBack }: { onBack: () => void }) {
         if (selected.length === 0) {
           throw new Error('Select at least one worker.')
         }
-        const width = Number(renderWidth)
-        const height = Number(renderHeight)
-        if (
-          !Number.isInteger(width) ||
-          !Number.isInteger(height) ||
-          width < 1 ||
-          height < 1
-        ) {
-          throw new Error('Render width and height must be positive integers.')
-        }
-        artifact = {
-          entry_point: 'main',
-          kind: 'shader_compute',
-          files: [
-            {
-              name: shaderFileName ?? 'shader.wgsl',
-              content: bytesToBase64(
-                new TextEncoder().encode(shaderSource ?? SHADER_TEMPLATE),
-              ),
-              mime: 'text/wgsl',
-            },
-          ],
-        }
-        requestBody = {
-          name,
-          artifact,
-          tasks: selected.map((workerId) => ({ worker_id: workerId })),
-          metadata: { type: 'wgsl', width, height },
+        if (wgpuMode === 'fragment') {
+          const width = Number(renderWidth)
+          const height = Number(renderHeight)
+          if (
+            !Number.isInteger(width) ||
+            !Number.isInteger(height) ||
+            width < 1 ||
+            height < 1
+          ) {
+            throw new Error(
+              'Render width and height must be positive integers.',
+            )
+          }
+          artifact = {
+            entry_point: 'main',
+            kind: 'shader_compute',
+            files: [
+              {
+                name: shaderFileName ?? 'shader.wgsl',
+                content: bytesToBase64(
+                  new TextEncoder().encode(shaderSource ?? SHADER_TEMPLATE),
+                ),
+                mime: 'text/wgsl',
+              },
+            ],
+          }
+          requestBody = {
+            name,
+            artifact,
+            tasks: selected.map((workerId) => ({ worker_id: workerId })),
+            metadata: { type: 'wgsl', width, height },
+          }
+        } else {
+          if (!inputImageBase64 || !inputImageFileName) {
+            throw new Error('Choose an input image to process.')
+          }
+          artifact = {
+            entry_point: 'main',
+            kind: 'shader_compute',
+            files: [
+              {
+                name: imageShaderFileName ?? 'image-processing.wgsl',
+                content: bytesToBase64(
+                  new TextEncoder().encode(
+                    imageShaderSource ?? IMAGE_PROCESSING_SHADER_TEMPLATE,
+                  ),
+                ),
+                mime: 'text/wgsl',
+              },
+              {
+                name: inputImageFileName,
+                content: inputImageBase64,
+                mime: inputImageMime,
+              },
+            ],
+          }
+          requestBody = {
+            name,
+            artifact,
+            tasks: selected.map((workerId) => ({ worker_id: workerId })),
+            metadata: { type: 'image_processing' },
+          }
         }
       } else if (exampleId === CUSTOM_EXAMPLE_ID) {
         const workerIds =
@@ -1018,6 +1139,28 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                   </button>
                 </div>
               </div>
+              {jobType === 'wgpu' ? (
+                <div>
+                  <label className="label" htmlFor="wgpu-mode">
+                    WGSL mode
+                  </label>
+                  <select
+                    id="wgpu-mode"
+                    className="input"
+                    value={wgpuMode}
+                    onChange={(event) =>
+                      setWgpuMode(
+                        event.target.value === 'image_processing'
+                          ? 'image_processing'
+                          : 'fragment',
+                      )
+                    }
+                  >
+                    <option value="fragment">WGSL fragment shader</option>
+                    <option value="image_processing">Image processing</option>
+                  </select>
+                </div>
+              ) : null}
               <div>
                 <label className="label" htmlFor="job-name">
                   Job name
@@ -1032,7 +1175,7 @@ function ClientPage({ onBack }: { onBack: () => void }) {
               </div>
             </div>
 
-            {jobType === 'wgpu' ? (
+            {jobType === 'wgpu' && wgpuMode === 'fragment' ? (
               <>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <div>
@@ -1077,7 +1220,7 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                       onClick={downloadShaderTemplate}
                       className="btn btn-secondary"
                     >
-                      Download shade template
+                      Download fragment shader template
                     </button>
                     {shaderFileName ? (
                       <span className="text-xs text-tx-primary">
@@ -1095,6 +1238,61 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                   </p>
                 </div>
               </>
+            ) : jobType === 'wgpu' && wgpuMode === 'image_processing' ? (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="label" htmlFor="input-image">
+                    Input image
+                  </label>
+                  <input
+                    id="input-image"
+                    type="file"
+                    accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+                    onChange={onImageSelected}
+                    className="file-input"
+                  />
+                  <p className="mt-2 text-xs text-tx-muted">
+                    {inputImageFileName
+                      ? `${inputImageFileName} · loaded`
+                      : 'Choose a PNG, JPEG, or WebP image.'}
+                  </p>
+                </div>
+                <div>
+                  <label className="label" htmlFor="image-processing-shader">
+                    Image-processing WGSL shader
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      id="image-processing-shader"
+                      type="file"
+                      accept=".wgsl,text/plain"
+                      onChange={onImageShaderSelected}
+                      className="file-input"
+                    />
+                    <button
+                      type="button"
+                      onClick={downloadImageProcessingShaderTemplate}
+                      className="btn btn-secondary"
+                    >
+                      Download image shader template
+                    </button>
+                    {imageShaderFileName ? (
+                      <span className="text-xs text-tx-primary">
+                        {imageShaderFileName} · loaded
+                      </span>
+                    ) : (
+                      <span className="text-xs text-tx-muted">
+                        Default grayscale shader is used when no file is
+                        selected.
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs text-tx-muted">
+                    Define <code>process_pixel(gid, input_pixel, out_idx)</code>{' '}
+                    and write the output with <code>write_pixel</code>.
+                  </p>
+                </div>
+              </div>
             ) : (
               <div className="mt-4 space-y-4">
                 <div>
@@ -1381,7 +1579,7 @@ function ClientPage({ onBack }: { onBack: () => void }) {
           <section className="card mt-6 overflow-hidden p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="section-title">Rendered image</h2>
+                <h2 className="section-title">Processed image</h2>
                 <p className="mt-1 text-xs text-tx-muted">
                   {renderedFrame.width} × {renderedFrame.height} · saved as{' '}
                   {renderedFrame.jobId}-render.png
@@ -1398,7 +1596,7 @@ function ClientPage({ onBack }: { onBack: () => void }) {
             <div className="mt-4 max-h-[70vh] overflow-auto rounded-sm border border-border bg-canvas p-2">
               <img
                 src={renderedFrame.url}
-                alt="Distributed WebGPU render"
+                alt="Distributed WebGPU image output"
                 className="mx-auto block h-auto max-w-full"
               />
             </div>

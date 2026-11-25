@@ -29,12 +29,37 @@ fn shade(gid: vec2<u32>, out_idx: u32) {
 }
 `
 
+export const IMAGE_PROCESSING_SHADER_TEMPLATE = `// Distributed WGSL image-processing template.
+//
+// The framework provides one source RGBA pixel in the 0.0..1.0 range.
+// Define only process_pixel(). gid is the GLOBAL image coordinate.
+// out_idx is the LOCAL output index for this tile; pass it to write_pixel().
+//
+// This default shader converts the input image to grayscale.
+fn process_pixel(gid: vec2<u32>, input_pixel: vec4<f32>, out_idx: u32) {
+    let gray = dot(input_pixel.rgb, vec3<f32>(0.299, 0.587, 0.114));
+    write_pixel(out_idx, vec4<f32>(gray, gray, gray, input_pixel.a));
+}
+`
+
 export function downloadShaderTemplate() {
   const blob = new Blob([SHADER_TEMPLATE], { type: 'text/wgsl' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
   link.download = 'shader-template.wgsl'
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+export function downloadImageProcessingShaderTemplate() {
+  const blob = new Blob([IMAGE_PROCESSING_SHADER_TEMPLATE], {
+    type: 'text/wgsl',
+  })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'image-processing-shader-template.wgsl'
   link.click()
   URL.revokeObjectURL(url)
 }

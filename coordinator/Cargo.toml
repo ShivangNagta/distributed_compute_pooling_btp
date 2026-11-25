@@ -9,6 +9,7 @@ bytemuck = { version = "1.23", features = ["derive"] }
 futures-channel = "0.3.34"
 futures-util = "0.3.34"
 rand = "0.10.3"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 axum = { version = "0.8.9", features = ["ws"] }
 tokio = { version = "1.53.2", features = ["macros", "rt-multi-thread"] }
 tower-http = { version = "0.7.0", features = ["cors"] }

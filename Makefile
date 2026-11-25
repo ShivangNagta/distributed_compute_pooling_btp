@@ -1,4 +1,4 @@
-.PHONY: format check lint test build ci wasm-examples bench-native bench-wasmtime bench-browser-setup bench-browser bench-report bench
+.PHONY: format check lint test build wasm-wgpu-worker wasm-examples bench-native bench-wasmtime bench-browser-setup bench-browser bench-report bench ci
 
 format:
 	cd coordinator && cargo fmt --all
@@ -18,6 +18,16 @@ test:
 
 build:
 	cd ui && npm run build
+
+wasm-wgpu-worker:
+	cargo build \
+		--manifest-path coordinator/wasm-wgpu-worker/Cargo.toml \
+		--target wasm32-unknown-unknown \
+		--release
+	wasm-bindgen \
+		coordinator/wasm-wgpu-worker/target/wasm32-unknown-unknown/release/coordinator_wgpu_worker.wasm \
+		--target web \
+		--out-dir ui/public/wasm-wgpu-worker
 
 ci: check lint test build
 

@@ -328,7 +328,14 @@ async fn finish_job_if_done(state: &AppState, job_id: &str) -> Result<Vec<Messag
             .await?
             .ok_or(AppError::NotFound)?;
         if job.artifact.kind == crate::contracts::ArtifactKind::ShaderCompute {
-            crate::shader_handler::aggregate_tiles(&tasks)?;
+            if tasks
+                .first()
+                .is_some_and(|task| task.input.get("input_pixels_base64").is_some())
+            {
+                crate::image_processing_handler::aggregate_tiles(&tasks)?;
+            } else {
+                crate::shader_handler::aggregate_tiles(&tasks)?;
+            }
         }
         Vec::new()
     } else {

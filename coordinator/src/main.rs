@@ -2,6 +2,7 @@ mod api;
 mod app_state;
 mod contracts;
 mod error;
+mod image_processing_handler;
 mod repository;
 mod service;
 mod shader_handler;

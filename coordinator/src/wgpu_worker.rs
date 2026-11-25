@@ -8,6 +8,8 @@ pub struct ShaderTaskInput {
     pub offset: [u32; 2],
     pub size: [u32; 2],
     pub global_resolution: [u32; 2],
+    #[serde(default)]
+    pub input_pixels_base64: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -17,9 +19,18 @@ pub struct ShaderTaskResult {
 
 const PREAMBLE: &str = include_str!("wgsl-template/preamble.wgsl");
 const ENTRYPOINT: &str = include_str!("wgsl-template/entrypoint.wgsl");
+const IMAGE_PROCESSING_PREAMBLE: &str =
+    include_str!("wgsl-template/image-processing-preamble.wgsl");
+const IMAGE_PROCESSING_ENTRYPOINT: &str =
+    include_str!("wgsl-template/image-processing-entrypoint.wgsl");
 
-fn build_shader(user_source: &str) -> String {
-    format!("{PREAMBLE}\n{user_source}\n{ENTRYPOINT}")
+fn build_shader(user_source: &str, image_processing: bool) -> String {
+    let (preamble, entrypoint) = if image_processing {
+        (IMAGE_PROCESSING_PREAMBLE, IMAGE_PROCESSING_ENTRYPOINT)
+    } else {
+        (PREAMBLE, ENTRYPOINT)
+    };
+    format!("{preamble}\n{user_source}\n{entrypoint}")
 }
 
 pub async fn execute_shader(source: &str, input: &Value) -> Result<Value, String> {
@@ -34,6 +45,23 @@ pub async fn execute_shader(source: &str, input: &Value) -> Result<Value, String
         .checked_mul(u64::from(tile_height))
         .and_then(|size| size.checked_mul(4))
         .ok_or_else(|| "shader output dimensions overflow".to_string())?;
+    let input_pixels = input
+        .input_pixels_base64
+        .as_deref()
+        .map(|encoded| {
+            BASE64
+                .decode(encoded)
+                .map_err(|error| format!("invalid image pixel data: {error}"))
+        })
+        .transpose()?;
+    if let Some(pixels) = &input_pixels {
+        if u64::try_from(pixels.len()).ok() != Some(output_size) {
+            return Err(format!(
+                "image tile contains {} bytes; expected {output_size}",
+                pixels.len()
+            ));
+        }
+    }
 
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
         backends: if cfg!(target_arch = "wasm32") {
@@ -62,7 +90,7 @@ pub async fn execute_shader(source: &str, input: &Value) -> Result<Value, String
         .await
         .map_err(|error| format!("unable to create GPU device: {error}"))?;
 
-    let full_source = build_shader(source);
+    let full_source = build_shader(source, input_pixels.is_some());
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("distributed shader"),
         source: wgpu::ShaderSource::Wgsl(full_source.into()),
@@ -94,44 +122,68 @@ pub async fn execute_shader(source: &str, input: &Value) -> Result<Value, String
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         mapped_at_creation: false,
     });
+    let mut layout_entries = vec![wgpu::BindGroupLayoutEntry {
+        binding: 0,
+        visibility: wgpu::ShaderStages::COMPUTE,
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    }];
+    if input_pixels.is_some() {
+        layout_entries.push(wgpu::BindGroupLayoutEntry {
+            binding: 1,
+            visibility: wgpu::ShaderStages::COMPUTE,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        });
+    }
+    let output_binding = if input_pixels.is_some() { 2 } else { 1 };
+    layout_entries.push(wgpu::BindGroupLayoutEntry {
+        binding: output_binding,
+        visibility: wgpu::ShaderStages::COMPUTE,
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Storage { read_only: false },
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    });
     let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("shader bindings"),
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-        ],
+        entries: &layout_entries,
+    });
+    let input_buffer = input_pixels.map(|pixels| {
+        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("shader image input"),
+            contents: &pixels,
+            usage: wgpu::BufferUsages::STORAGE,
+        })
+    });
+    let mut bind_group_entries = vec![wgpu::BindGroupEntry {
+        binding: 0,
+        resource: uniform.as_entire_binding(),
+    }];
+    if let Some(input_buffer) = &input_buffer {
+        bind_group_entries.push(wgpu::BindGroupEntry {
+            binding: 1,
+            resource: input_buffer.as_entire_binding(),
+        });
+    }
+    bind_group_entries.push(wgpu::BindGroupEntry {
+        binding: output_binding,
+        resource: output.as_entire_binding(),
     });
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("shader bind group"),
         layout: &layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: output.as_entire_binding(),
-            },
-        ],
+        entries: &bind_group_entries,
     });
     let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
         label: Some("distributed shader pipeline"),
@@ -180,4 +232,32 @@ pub async fn execute_shader(source: &str, input: &Value) -> Result<Value, String
     Ok(json!(ShaderTaskResult {
         pixels_base64: BASE64.encode(pixels),
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn image_processing_shader_uses_image_bindings_and_entrypoint() {
+        let shader = build_shader(
+            "fn process_pixel(gid: vec2<u32>, input_pixel: vec4<f32>, out_idx: u32) {}",
+            true,
+        );
+        assert!(shader.contains("@binding(1) var<storage, read> input_pixels"));
+        assert!(shader.contains("process_pixel(gid, source_pixel(out_idx), out_idx)"));
+    }
+
+    #[tokio::test]
+    async fn rejects_image_tiles_with_incorrect_byte_length() {
+        let input = json!({
+            "offset": [0, 0],
+            "size": [1, 1],
+            "global_resolution": [1, 1],
+            "input_pixels_base64": "AQID",
+        });
+
+        let error = execute_shader("", &input).await.unwrap_err();
+        assert!(error.contains("image tile contains 3 bytes; expected 4"));
+    }
 }

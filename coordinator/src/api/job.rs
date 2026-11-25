@@ -53,22 +53,25 @@ pub async fn submit_handler(
 ) -> Result<Json<SubmitJobResponse>, AppError> {
     authenticated_room(&state, &room_id, &headers).await?;
 
-    let job = if request
+    let job = match request
         .metadata
         .get("type")
         .and_then(|value| value.as_str())
-        == Some("wgsl")
     {
-        crate::shader_handler::submit(&state, &room_id, request).await?
-    } else {
-        service::submit_job(
-            &state,
-            &room_id,
-            request.name,
-            request.artifact,
-            request.tasks,
-        )
-        .await?
+        Some("wgsl") => crate::shader_handler::submit(&state, &room_id, request).await?,
+        Some("image_processing") => {
+            crate::image_processing_handler::submit(&state, &room_id, request).await?
+        }
+        _ => {
+            service::submit_job(
+                &state,
+                &room_id,
+                request.name,
+                request.artifact,
+                request.tasks,
+            )
+            .await?
+        }
     };
 
     Ok(Json(SubmitJobResponse { job_id: job.id }))
@@ -244,5 +247,33 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn submit_accepts_request_larger_than_default_body_limit() {
+        let (state, _dir) = setup().await;
+        let room = service::create_room(&state).await.unwrap();
+        let app = crate::api::router(state);
+        let body = serde_json::json!({
+            "name": "large image upload",
+            "artifact": { "entry_point": "main", "files": [] },
+            "tasks": [],
+            "large_field": "x".repeat(2 * 1024 * 1024),
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/room/{}/job/submit", room.id))
+                    .header("Authorization", format!("Bearer {}", room.client_token))
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 }

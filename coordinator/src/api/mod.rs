@@ -5,12 +5,15 @@ pub mod worker;
 
 use axum::{
     Router,
+    extract::DefaultBodyLimit,
     http::header::{AUTHORIZATION, CONTENT_TYPE},
     routing::{get, post},
 };
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::app_state::AppState;
+
+const MAX_JOB_REQUEST_BYTES: usize = 16 * 1024 * 1024;
 
 pub fn router(state: AppState) -> Router {
     let cors = CorsLayer::new()
@@ -26,12 +29,10 @@ pub fn router(state: AppState) -> Router {
             "/ws/join_room/{room_id}/{room_token}",
             get(worker::ws_handler),
         )
-        .route("/room/{room_id}/job/submit", post(job::submit_handler))
-        // .route("/room/{room_id}/wasm-job/submit", post(job::submit_handler))
-        // .route(
-        //     "/room/{room_id}/shader-job/submit",
-        //     post(job::submit_handler),
-        // )
+        .route(
+            "/room/{room_id}/job/submit",
+            post(job::submit_handler).layer(DefaultBodyLimit::max(MAX_JOB_REQUEST_BYTES)),
+        )
         .route("/room/{room_id}/job/{job_id}", get(job::get_handler))
         .with_state(state)
         .layer(cors)

@@ -72,10 +72,15 @@ export async function runWasmTask(
   const instance = new WebAssembly.Instance(
     new WebAssembly.Module(base64ToBytes(wasmFile.content)),
   )
-  const entry = (instance.exports as Record<string, unknown>)[
-    artifact.entry_point
-  ]
+  const exports = instance.exports as Record<string, unknown>
 
+  // Emscripten reactors export `_initialize`; call it before the entry point.
+  const initialize = exports._initialize
+  if (typeof initialize === 'function') {
+    ;(initialize as () => void)()
+  }
+
+  const entry = exports[artifact.entry_point]
   if (typeof entry !== 'function') {
     throw new Error(`export "${artifact.entry_point}" not found`)
   }
@@ -84,7 +89,30 @@ export async function runWasmTask(
   const started = performance.now()
   const result = (entry as (...a: unknown[]) => unknown)(...args)
 
-  return { result, execution_time_ms: Math.round(performance.now() - started) }
+  return {
+    result: toJsonSafe(result),
+    execution_time_ms: Math.round(performance.now() - started),
+  }
+}
+
+/// WebAssembly i64 values surface as BigInt, which JSON.stringify rejects.
+/// Normalize them before they travel over the wire.
+function toJsonSafe(value: unknown): unknown {
+  if (typeof value === 'bigint') {
+    return value.toString()
+  }
+  if (Array.isArray(value)) {
+    return value.map(toJsonSafe)
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        toJsonSafe(item),
+      ]),
+    )
+  }
+  return value
 }
 
 function base64ToBytes(base64: string): Uint8Array<ArrayBuffer> {

@@ -1,0 +1,6 @@
+case,result,native_warm_p50_ms,wasmtime_warm_p50_ms,wasmtime_cold_total_ms,browser_warm_p50_ms,browser_cold_total_ms
+fib,1884755131,0.475,0.533,9.303,0.7,0.8
+prime_count,148933,114.67,99.693,103.101,111.2,111.3
+monte_carlo_pi,3.1418504,28.133,29.101,39.865,27.7,28
+matmul_checksum,1344449826,0.531,1.304,7.702,1.3,1.4
+hash_chain,2488766478,56.608,56.315,61.514,55.3,55.6

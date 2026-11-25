@@ -81,7 +81,7 @@ Submit a job to a specific browser and receive the result.
 ### Submission
 
 * [x] Submit job from coordinator
-* [ ] Manually select worker
+* [x] Manually select worker
 * [x] Send job to worker
 * [x] Execute job
 * [x] Return result
@@ -105,9 +105,9 @@ Define what a CPU job looks like and execute it remotely.
 ### Programming model
 
 * [ ] Decide CPU job representation
-* [ ] Decide how input is provided
+* [x] Decide how input is provided
 * [x] Decide how output is returned
-* [ ] Decide how the WebAssembly module is provided
+* [x] Decide how the WebAssembly module is provided
 
 ### Execution
 
@@ -120,8 +120,8 @@ Define what a CPU job looks like and execute it remotely.
 
 * [ ] Vector addition
 * [x] Numerical computation
-* [ ] Matrix operation
-* [ ] One larger CPU workload
+* [x] Matrix operation
+* [x] One larger CPU workload
 
 
 ---
@@ -199,17 +199,24 @@ Measure the cost and usefulness of remote CPU/GPU execution.
 
 ### Measurements
 
-* [ ] Local execution time
+* [x] Local execution time
 * [ ] Job upload time
 * [ ] Remote execution time
 * [ ] Result download time
 * [ ] Total remote execution time
 
+### Benchmark harness
+
+* [x] Native harness (`make bench-native`)
+* [x] Wasmtime warm/cold harness (`make bench-wasmtime`)
+* [x] Headless browser harness (`make bench-browser`)
+* [x] JSON/Markdown/CSV report (`make bench-report`)
+
 ### CPU experiments
 
-* [ ] Small CPU job
-* [ ] Medium CPU job
-* [ ] Large CPU job
+* [x] Small CPU job
+* [x] Medium CPU job
+* [x] Large CPU job
 * [ ] Compare local vs remote
 
 ### GPU experiments
@@ -229,8 +236,8 @@ Measure the cost and usefulness of remote CPU/GPU execution.
 
 ### Results
 
-* [ ] Record results
-* [ ] Create graphs
+* [x] Record results
+* [x] Create graphs
 * [ ] Identify communication overhead
 * [ ] Identify execution overhead
 * [ ] Identify workloads where remote execution is useful
@@ -243,7 +250,7 @@ Measure the cost and usefulness of remote CPU/GPU execution.
 
 ### Scheduling
 
-* [ ] Automatic worker selection
+* [x] Automatic worker selection
 * [ ] Resource-aware scheduling
 * [ ] Network-aware scheduling
 * [ ] Job/workload-aware scheduling

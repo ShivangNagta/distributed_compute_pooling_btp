@@ -12,7 +12,17 @@ import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { COORDINATOR_URL, coordinatorWsUrl, parseMessage } from '../coordinator'
 import {
+  CUSTOM_EXAMPLE_ID,
+  EXAMPLES,
+  defaultValueMap,
+  findExample,
+  loadExampleArtifact,
+  loadSource,
+  type WorkloadExample,
+} from '../lib/examples'
+import {
   addJobIfMissing,
+  getLatestJob,
   upsertJob,
   upsertTask,
   type JobRecord,
@@ -20,6 +30,12 @@ import {
 import { sampleArtifact } from '../lib/sample'
 import { downloadShaderTemplate, SHADER_TEMPLATE } from '../lib/shaderTemplate'
 import { jobStatusTone, statusTone, taskStatusTone } from '../lib/status'
+import {
+  buildTaskInputs,
+  combineResults,
+  formatResult,
+  validateValues,
+} from '../lib/workloads'
 import {
   loadActiveRoomId,
   loadClientRooms,
@@ -179,19 +195,27 @@ const WorkerCard = memo(function WorkerCard({ worker }: { worker: Worker }) {
   )
 })
 
-const JobCard = memo(function JobCard({ record }: { record: JobRecord }) {
+const JobCard = memo(function JobCard({
+  record,
+  showHeader = true,
+}: {
+  record: JobRecord
+  showHeader?: boolean
+}) {
   const isWgpu = record.job.artifact.kind === 'shader_compute'
   const showTaskStatus = record.tasks.length > 1
   return (
     <div className="subcard">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-tx-primary">
-          {record.job.name}
-        </span>
-        <StatusBadge tone={jobStatusTone(record.job.status)}>
-          {record.job.status}
-        </StatusBadge>
-      </div>
+      {showHeader ? (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium text-tx-primary">
+            {record.job.name}
+          </span>
+          <StatusBadge tone={jobStatusTone(record.job.status)}>
+            {record.job.status}
+          </StatusBadge>
+        </div>
+      ) : null}
       <div className="mono mt-1 text-xs text-tx-muted">{record.job.id}</div>
 
       <div className="mt-3 space-y-2">
@@ -230,6 +254,129 @@ const JobCard = memo(function JobCard({ record }: { record: JobRecord }) {
   )
 })
 
+const JobHistoryItem = memo(function JobHistoryItem({
+  record,
+}: {
+  record: JobRecord
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="rounded-sm border border-border-strong bg-surface">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left hover:border-accent"
+      >
+        <span className="mono truncate text-tx-primary">{record.job.name}</span>
+        <StatusBadge tone={jobStatusTone(record.job.status)}>
+          {record.job.status}
+        </StatusBadge>
+      </button>
+      {open ? (
+        <div className="border-t border-border p-3">
+          <JobCard record={record} showHeader={false} />
+        </div>
+      ) : null}
+    </div>
+  )
+})
+
+type RunContext = {
+  example: WorkloadExample
+  values: Record<string, number>
+  split: boolean
+}
+
+function SourceViewer({ url }: { url: string }) {
+  const [source, setSource] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    loadSource(url)
+      .then((text) => {
+        if (!cancelled) setSource(text)
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) {
+          setError(
+            cause instanceof Error ? cause.message : 'Unable to load source.',
+          )
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [url])
+
+  if (error) {
+    return <p className="text-sm text-danger">{error}</p>
+  }
+  if (source === null) {
+    return <p className="text-sm text-tx-muted">Loading source...</p>
+  }
+  return (
+    <pre className="mono max-h-80 overflow-auto rounded-sm border border-border bg-panel p-3 text-xs text-tx-primary">
+      <code>{source}</code>
+    </pre>
+  )
+}
+
+type RunResult = {
+  jobId: string
+  context: RunContext
+  record: JobRecord
+  combined: number | null
+}
+
+function RunResultCard({ run }: { run: RunResult }) {
+  return (
+    <div className="subcard">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium text-tx-primary">
+          {run.context.example.title}
+        </span>
+        <span className="text-xs text-tx-muted">
+          {run.context.split
+            ? `${run.record.tasks.length} workers`
+            : 'single worker'}
+        </span>
+      </div>
+      <div className="mono mt-1 text-2xl font-semibold text-tx-primary">
+        {formatResult(run.combined, run.context.example.resultType)}
+      </div>
+      <div className="mt-2 space-y-1 text-xs text-tx-secondary">
+        {run.record.tasks.map((task) => (
+          <div
+            key={task.id}
+            className="flex items-center justify-between gap-2"
+          >
+            <span className="mono truncate">
+              {task.worker_id ?? 'unassigned'}
+            </span>
+            <span
+              className={task.status === 'failed' ? 'text-danger' : undefined}
+            >
+              {task.status === 'failed'
+                ? `Error: ${task.error ?? 'failed'}`
+                : formatResult(
+                    typeof task.result === 'number'
+                      ? task.result
+                      : Number(task.result),
+                    run.context.example.resultType,
+                  )}
+              {task.execution_time_ms != null
+                ? ` · ${task.execution_time_ms} ms`
+                : ''}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function ClientPage({ onBack }: { onBack: () => void }) {
   const socketByRoom = useRef<Record<string, WebSocket>>({})
   const [initialRooms] = useState<StoredRoom[]>(() => loadClientRooms())
@@ -246,7 +393,15 @@ function ClientPage({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState<string | null>(null)
 
   const [jobs, setJobs] = useState<JobRecord[]>([])
-  const [jobName, setJobName] = useState('add')
+  const [jobName, setJobName] = useState(EXAMPLES[0].title)
+  const [exampleId, setExampleId] = useState(EXAMPLES[0].id)
+  const [exampleValues, setExampleValues] = useState<Record<string, number>>(
+    () => defaultValueMap(EXAMPLES[0]),
+  )
+  const [runMode, setRunMode] = useState<'single' | 'split'>('single')
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [sourceOpen, setSourceOpen] = useState(false)
+  const [runContexts, setRunContexts] = useState<Record<string, RunContext>>({})
   const [entryPoint, setEntryPoint] = useState('add')
   const [source, setSource] = useState<'sample' | 'upload'>('sample')
   const [wasmBase64, setWasmBase64] = useState<string | null>(null)
@@ -441,6 +596,20 @@ function ClientPage({ onBack }: { onBack: () => void }) {
     }
   }
 
+  const onExampleChange = (value: string) => {
+    setExampleId(value)
+    setSubmitError(null)
+    setSourceOpen(false)
+    const next = findExample(value)
+    if (next) {
+      setExampleValues(defaultValueMap(next))
+      setJobName(next.title)
+      setRunMode('single')
+    } else {
+      setJobName('custom')
+    }
+  }
+
   const toggleWorker = (workerId: string) => {
     setSelectedWorkers((current) => {
       const next = new Set(current)
@@ -508,26 +677,23 @@ function ClientPage({ onBack }: { onBack: () => void }) {
     setSubmitError(null)
 
     try {
-      if (selectedWorkers.size === 0) {
-        throw new Error('Select at least one worker.')
-      }
-
       const name = jobName.trim() || 'job'
       const connectedWorkerIds = new Set(
         activeRoom.workers.map((worker) => worker.id),
       )
-      const workerIds = [...selectedWorkers].filter((workerId) =>
+      const selected = [...selectedWorkers].filter((workerId) =>
         connectedWorkerIds.has(workerId),
       )
-      if (workerIds.length === 0) {
-        throw new Error(
-          'Selected workers are no longer connected. Select an active worker.',
-        )
-      }
+      const allConnected = [...connectedWorkerIds]
 
       let requestBody: object
       let artifact: Artifact
+      let runContext: RunContext | null = null
+
       if (jobType === 'wgpu') {
+        if (selected.length === 0) {
+          throw new Error('Select at least one worker.')
+        }
         const width = Number(renderWidth)
         const height = Number(renderHeight)
         if (
@@ -554,10 +720,15 @@ function ClientPage({ onBack }: { onBack: () => void }) {
         requestBody = {
           name,
           artifact,
-          tasks: workerIds.map((workerId) => ({ worker_id: workerId })),
+          tasks: selected.map((workerId) => ({ worker_id: workerId })),
           metadata: { type: 'wgsl', width, height },
         }
-      } else {
+      } else if (exampleId === CUSTOM_EXAMPLE_ID) {
+        const workerIds =
+          selected.length > 0 ? selected.slice(0, 1) : allConnected.slice(0, 1)
+        if (workerIds.length === 0) {
+          throw new Error('Connect a worker first.')
+        }
         let input: unknown
         try {
           input = JSON.parse(inputText)
@@ -583,6 +754,46 @@ function ClientPage({ onBack }: { onBack: () => void }) {
           artifact,
           tasks: workerIds.map((workerId) => ({ worker_id: workerId, input })),
           metadata: {},
+        }
+      } else {
+        const example = findExample(exampleId)
+        if (!example) {
+          throw new Error('Choose a workload.')
+        }
+        const valueError = validateValues(example, exampleValues)
+        if (valueError) {
+          throw new Error(valueError)
+        }
+        const useSplit = runMode === 'split' && example.split !== undefined
+        const workerIds = useSplit
+          ? selected.length > 0
+            ? selected
+            : allConnected
+          : selected.length > 0
+            ? selected.slice(0, 1)
+            : allConnected.slice(0, 1)
+        if (workerIds.length === 0) {
+          throw new Error('Connect a worker first.')
+        }
+        const inputs = buildTaskInputs(
+          example,
+          exampleValues,
+          useSplit ? workerIds.length : 1,
+        )
+        artifact = await loadExampleArtifact(example)
+        requestBody = {
+          name,
+          artifact,
+          tasks: workerIds.map((workerId, index) => ({
+            worker_id: workerId,
+            input: inputs[index] ?? inputs[0],
+          })),
+          metadata: {},
+        }
+        runContext = {
+          example,
+          values: { ...exampleValues },
+          split: useSplit,
         }
       }
 
@@ -621,6 +832,10 @@ function ClientPage({ onBack }: { onBack: () => void }) {
           finished_at: null,
         }),
       )
+      if (runContext) {
+        const context = runContext
+        setRunContexts((current) => ({ ...current, [jobId]: context }))
+      }
       setSelectedWorkers(new Set())
       setStatus(`Job ${jobId} submitted.`)
     } catch (submitFailure) {
@@ -636,6 +851,33 @@ function ClientPage({ onBack }: { onBack: () => void }) {
 
   const activeRoom =
     rooms.find((room) => room.id === activeRoomId) ?? rooms[0] ?? null
+  const example =
+    exampleId === CUSTOM_EXAMPLE_ID ? null : (findExample(exampleId) ?? null)
+
+  const latestJob = getLatestJob(jobs)
+  const runResults: RunResult[] = jobs.flatMap((record) => {
+    const context = runContexts[record.job.id]
+    if (!context) return []
+    if (record.tasks.length === 0) return []
+    const finished = record.tasks.every(
+      (task) => task.status === 'completed' || task.status === 'failed',
+    )
+    if (!finished) return []
+    const results = record.tasks
+      .filter((task) => task.status === 'completed')
+      .map((task) =>
+        typeof task.result === 'number' ? task.result : Number(task.result),
+      )
+      .filter((value) => Number.isFinite(value))
+    return [
+      {
+        jobId: record.job.id,
+        context,
+        record,
+        combined: combineResults(context.example, results),
+      },
+    ]
+  })
 
   return (
     <main className="min-h-screen bg-base text-tx-primary">
@@ -755,7 +997,7 @@ function ClientPage({ onBack }: { onBack: () => void }) {
 
         {activeRoom ? (
           <section className="card mt-6 p-5">
-            <h2 className="section-title">Submit job</h2>
+            <h2 className="section-title">Run a job</h2>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div>
                 <span className="label">Task type</span>
@@ -788,180 +1030,350 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                   placeholder="add"
                 />
               </div>
-              {jobType === 'wasm' ? (
-                <div>
-                  <label className="label" htmlFor="entry-point">
-                    Entry point
-                  </label>
-                  <input
-                    id="entry-point"
-                    className="input"
-                    value={entryPoint}
-                    onChange={(event) => setEntryPoint(event.target.value)}
-                    placeholder="add"
-                  />
-                </div>
-              ) : null}
             </div>
 
             {jobType === 'wgpu' ? (
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="label" htmlFor="render-width">
-                    Render width
-                  </label>
-                  <input
-                    id="render-width"
-                    className="input"
-                    type="number"
-                    min="1"
-                    value={renderWidth}
-                    onChange={(event) => setRenderWidth(event.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="label" htmlFor="render-height">
-                    Render height
-                  </label>
-                  <input
-                    id="render-height"
-                    className="input"
-                    type="number"
-                    min="1"
-                    value={renderHeight}
-                    onChange={(event) => setRenderHeight(event.target.value)}
-                  />
-                </div>
-              </div>
-            ) : null}
-
-            {jobType === 'wgpu' ? (
-              <div className="mt-4">
-                <span className="label">WGSL shader</span>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    type="file"
-                    accept=".wgsl,text/plain"
-                    onChange={onShaderSelected}
-                    className="file-input"
-                  />
-                  <button
-                    type="button"
-                    onClick={downloadShaderTemplate}
-                    className="btn btn-secondary"
-                  >
-                    Download shade template
-                  </button>
-                  {shaderFileName ? (
-                    <span className="text-xs text-tx-primary">
-                      {shaderFileName} · loaded
-                    </span>
-                  ) : (
-                    <span className="text-xs text-tx-muted">
-                      Built-in template is used when no file is selected.
-                    </span>
-                  )}
-                </div>
-                <p className="mt-2 text-xs text-tx-muted">
-                  Upload a WGSL file containing only{' '}
-                  <code>shade(gid, out_idx)</code>.
-                </p>
-              </div>
-            ) : null}
-
-            {jobType === 'wasm' ? (
-              <div className="mt-4">
-                <span className="label">Wasm module</span>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSource('sample')}
-                    className={`btn ${source === 'sample' ? 'btn-primary' : 'btn-secondary'}`}
-                  >
-                    Sample
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSource('upload')}
-                    className={`btn ${source === 'upload' ? 'btn-primary' : 'btn-secondary'}`}
-                  >
-                    Upload .wasm
-                  </button>
-                  {source === 'upload' ? (
-                    <span className="flex items-center gap-2 text-sm">
-                      <input
-                        type="file"
-                        accept=".wasm,application/wasm"
-                        onChange={onFileSelected}
-                        className="file-input"
-                      />
-                      {fileName ? (
-                        <span className="text-tx-primary">
-                          {fileName} · loaded
-                        </span>
-                      ) : (
-                        <span className="text-tx-muted">No file selected</span>
-                      )}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-tx-muted">
-                      Built-in add(i32, i32)
-                    </span>
-                  )}
-                </div>
-              </div>
-            ) : null}
-
-            {jobType === 'wasm' ? (
-              <div className="mt-4">
-                <label className="label" htmlFor="job-input">
-                  Input (JSON array of arguments)
-                </label>
-                <input
-                  id="job-input"
-                  className="input mono"
-                  value={inputText}
-                  onChange={(event) => setInputText(event.target.value)}
-                  placeholder="[1, 2]"
-                />
-              </div>
-            ) : null}
-
-            <div className="mt-4">
-              <span className="label">Workers</span>
-              {activeRoom.workers.length === 0 ? (
-                <p className="text-sm text-tx-muted">No workers connected.</p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {activeRoom.workers.map((worker) => (
-                    <label
-                      key={worker.id}
-                      className="flex items-center gap-2 rounded-sm border border-border-strong px-2.5 py-1.5 text-sm hover:border-accent hover:bg-surface"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedWorkers.has(worker.id)}
-                        onChange={() => toggleWorker(worker.id)}
-                        className="h-4 w-4 rounded-sm border-border-strong accent-accent"
-                      />
-                      <span className="mono">{worker.id}</span>
+              <>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="label" htmlFor="render-width">
+                      Render width
                     </label>
-                  ))}
+                    <input
+                      id="render-width"
+                      className="input"
+                      type="number"
+                      min="1"
+                      value={renderWidth}
+                      onChange={(event) => setRenderWidth(event.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="label" htmlFor="render-height">
+                      Render height
+                    </label>
+                    <input
+                      id="render-height"
+                      className="input"
+                      type="number"
+                      min="1"
+                      value={renderHeight}
+                      onChange={(event) => setRenderHeight(event.target.value)}
+                    />
+                  </div>
                 </div>
-              )}
-            </div>
+
+                <div className="mt-4">
+                  <span className="label">WGSL shader</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="file"
+                      accept=".wgsl,text/plain"
+                      onChange={onShaderSelected}
+                      className="file-input"
+                    />
+                    <button
+                      type="button"
+                      onClick={downloadShaderTemplate}
+                      className="btn btn-secondary"
+                    >
+                      Download shade template
+                    </button>
+                    {shaderFileName ? (
+                      <span className="text-xs text-tx-primary">
+                        {shaderFileName} · loaded
+                      </span>
+                    ) : (
+                      <span className="text-xs text-tx-muted">
+                        Built-in template is used when no file is selected.
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-xs text-tx-muted">
+                    Upload a WGSL file containing only{' '}
+                    <code>shade(gid, out_idx)</code>.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="label" htmlFor="workload">
+                    Workload
+                  </label>
+                  <select
+                    id="workload"
+                    className="input [&>option]:bg-surface [&>option]:text-tx-primary"
+                    value={exampleId}
+                    onChange={(event) => onExampleChange(event.target.value)}
+                  >
+                    {EXAMPLES.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.title}: {item.language.toUpperCase()}
+                      </option>
+                    ))}
+                    <option value={CUSTOM_EXAMPLE_ID}>
+                      Custom .wasm module...
+                    </option>
+                  </select>
+                  {example ? (
+                    <p className="mt-1 text-xs text-tx-muted">
+                      {example.description}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-tx-muted">
+                      Upload a precompiled, import-free wasm module and pass a
+                      JSON array of positional arguments.
+                    </p>
+                  )}
+                </div>
+
+                {example ? (
+                  <>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {example.args.map((arg) => (
+                        <div key={arg.key}>
+                          <label className="label" htmlFor={`arg-${arg.key}`}>
+                            {arg.label}
+                          </label>
+                          <input
+                            id={`arg-${arg.key}`}
+                            className="input mono"
+                            type="number"
+                            inputMode={
+                              arg.type === 'f64' ? 'decimal' : 'numeric'
+                            }
+                            min={arg.min}
+                            max={arg.max}
+                            step={arg.step ?? (arg.type === 'f64' ? 'any' : 1)}
+                            value={
+                              Number.isFinite(exampleValues[arg.key])
+                                ? exampleValues[arg.key]
+                                : arg.default
+                            }
+                            onChange={(event) =>
+                              setExampleValues((current) => ({
+                                ...current,
+                                [arg.key]: event.target.valueAsNumber,
+                              }))
+                            }
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    <div>
+                      <span className="label">Parallelism</span>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setRunMode('single')}
+                          className={`btn ${runMode === 'single' ? 'btn-primary' : 'btn-secondary'}`}
+                        >
+                          Single worker
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!example.split}
+                          onClick={() => setRunMode('split')}
+                          className={`btn ${runMode === 'split' ? 'btn-primary' : 'btn-secondary'}`}
+                        >
+                          Split across workers
+                        </button>
+                      </div>
+                      <p className="mt-1 text-xs text-tx-muted">
+                        {example.split
+                          ? 'Split mode partitions the input across all connected workers (or the selected ones) and combines the results.'
+                          : 'This workload runs on a single worker.'}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSourceOpen((value) => !value)}
+                        className="btn btn-secondary"
+                      >
+                        {sourceOpen ? 'Hide source' : 'View source'}
+                      </button>
+                      <span className="text-xs text-tx-muted">
+                        {example.language === 'rust' ? 'Rust' : 'C'} ·{' '}
+                        {example.entryPoint}
+                      </span>
+                    </div>
+                    {sourceOpen ? (
+                      <SourceViewer
+                        key={example.sourceUrl}
+                        url={example.sourceUrl}
+                      />
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="label" htmlFor="entry-point">
+                        Entry point
+                      </label>
+                      <input
+                        id="entry-point"
+                        className="input"
+                        value={entryPoint}
+                        onChange={(event) => setEntryPoint(event.target.value)}
+                        placeholder="add"
+                      />
+                    </div>
+                    <div>
+                      <label className="label" htmlFor="job-input">
+                        Input (JSON array of arguments)
+                      </label>
+                      <input
+                        id="job-input"
+                        className="input mono"
+                        value={inputText}
+                        onChange={(event) => setInputText(event.target.value)}
+                        placeholder="[1, 2]"
+                      />
+                    </div>
+                    <div>
+                      <span className="label">Wasm module</span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSource('sample')}
+                          className={`btn ${source === 'sample' ? 'btn-primary' : 'btn-secondary'}`}
+                        >
+                          Sample
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSource('upload')}
+                          className={`btn ${source === 'upload' ? 'btn-primary' : 'btn-secondary'}`}
+                        >
+                          Upload .wasm
+                        </button>
+                        {source === 'upload' ? (
+                          <span className="flex items-center gap-2 text-sm">
+                            <input
+                              type="file"
+                              accept=".wasm,application/wasm"
+                              onChange={onFileSelected}
+                              className="file-input"
+                            />
+                            {fileName ? (
+                              <span className="text-tx-primary">
+                                {fileName} · loaded
+                              </span>
+                            ) : (
+                              <span className="text-tx-muted">
+                                No file selected
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-tx-muted">
+                            Built-in add(i32, i32)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvanced((value) => !value)}
+                    className="text-xs text-tx-muted underline"
+                  >
+                    {showAdvanced
+                      ? 'Hide advanced worker selection'
+                      : 'Advanced worker selection'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {jobType === 'wgpu' ||
+            showAdvanced ||
+            exampleId === CUSTOM_EXAMPLE_ID ? (
+              <div className="mt-4">
+                <span className="label">
+                  Workers
+                  {jobType === 'wasm' && !showAdvanced ? ' (optional)' : ''}
+                </span>
+                {activeRoom.workers.length === 0 ? (
+                  <p className="text-sm text-tx-muted">No workers connected.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {activeRoom.workers.map((worker) => (
+                      <label
+                        key={worker.id}
+                        className="flex items-center gap-2 rounded-sm border border-border-strong px-2.5 py-1.5 text-sm hover:border-accent hover:bg-surface"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedWorkers.has(worker.id)}
+                          onChange={() => toggleWorker(worker.id)}
+                          className="h-4 w-4 rounded-sm border-border-strong accent-accent"
+                        />
+                        <span className="mono">{worker.id}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : null}
 
             <button
               type="button"
               onClick={submitJob}
-              disabled={submitting || selectedWorkers.size === 0}
+              disabled={
+                submitting || (jobType === 'wgpu' && selectedWorkers.size === 0)
+              }
               className="btn btn-primary mt-5"
             >
-              {submitting ? 'Submitting...' : 'Submit job'}
+              {submitting
+                ? 'Submitting...'
+                : jobType === 'wasm' && example
+                  ? 'Run function'
+                  : 'Submit job'}
             </button>
             {submitError ? (
               <p className="mt-3 text-sm text-danger">{submitError}</p>
             ) : null}
+          </section>
+        ) : null}
+
+        {runResults.length > 0 ? (
+          <section className="card mt-6 p-5">
+            <h2 className="section-title">Function results</h2>
+            <div className="mt-3 space-y-3">
+              {runResults.slice(0, 1).map((run) => (
+                <RunResultCard key={run.jobId} run={run} />
+              ))}
+              {runResults.length > 1 ? (
+                <div className="space-y-2">
+                  {runResults.slice(1).map((run) => (
+                    <details
+                      key={run.jobId}
+                      className="rounded-sm border border-border-strong bg-surface"
+                    >
+                      <summary className="cursor-pointer list-none rounded-sm border border-border-strong bg-surface px-3 py-2.5 text-sm text-tx-secondary hover:border-accent">
+                        <span className="block truncate text-tx-primary">
+                          {run.context.example.title}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-tx-muted">
+                          Job {run.jobId}
+                        </span>
+                      </summary>
+                      <div className="mt-2 border-t border-border p-3">
+                        <RunResultCard run={run} />
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </section>
         ) : null}
 
@@ -1006,9 +1418,14 @@ function ClientPage({ onBack }: { onBack: () => void }) {
             <p className="text-sm text-tx-muted">No jobs submitted yet.</p>
           ) : (
             <div className="space-y-3">
-              {jobs.map((record) => (
-                <JobCard key={record.job.id} record={record} />
-              ))}
+              {latestJob ? <JobCard record={latestJob} /> : null}
+              {jobs.length > 1 ? (
+                <div className="space-y-2">
+                  {jobs.slice(1).map((record) => (
+                    <JobHistoryItem key={record.job.id} record={record} />
+                  ))}
+                </div>
+              ) : null}
             </div>
           )}
         </section>

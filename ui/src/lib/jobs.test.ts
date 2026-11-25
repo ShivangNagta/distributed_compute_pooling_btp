@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Job, Task } from '../types'
-import { addJobIfMissing, upsertJob, upsertTask, type JobRecord } from './jobs'
+import {
+  addJobIfMissing,
+  getLatestJob,
+  upsertJob,
+  upsertTask,
+  type JobRecord,
+} from './jobs'
 
 function job(id: string, status: Job['status'] = 'created'): Job {
   return {
@@ -70,5 +76,17 @@ describe('jobs', () => {
 
     expect(jobs[0].tasks).toHaveLength(1)
     expect(jobs[0].tasks[0].status).toBe('completed')
+  })
+
+  it('returns the most recent job as the latest record', () => {
+    let jobs: JobRecord[] = []
+    jobs = addJobIfMissing(jobs, job('j1', 'completed'))
+    jobs = addJobIfMissing(jobs, job('j2', 'running'))
+
+    expect(getLatestJob(jobs)?.job.id).toBe('j2')
+  })
+
+  it('returns undefined when there are no jobs', () => {
+    expect(getLatestJob([])).toBeUndefined()
   })
 })

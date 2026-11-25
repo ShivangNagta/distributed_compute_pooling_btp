@@ -15,6 +15,12 @@ function placeholder(jobId: string): Job {
   }
 }
 
+/// Returns the most recent job record. Job records are kept newest-first, so
+/// the latest job is the first entry in the list.
+export function getLatestJob(jobs: JobRecord[]): JobRecord | undefined {
+  return jobs[0]
+}
+
 /// Adds a job only if it is not already present. Used for the optimistic add
 /// after submit: the coordinator dispatches before returning the response, so a
 /// job_update may already have created the record.

@@ -50,8 +50,11 @@ async function main() {
   const pageConfig = {
     iterations: config.iterations,
     warmup: config.warmup,
-    wasmUrl: '/ui/public/examples/workloads.wasm',
-    cases: config.cases,
+    cases: config.cases.map((item) => {
+      const absolute = path.resolve(path.dirname(configPath), item.wasm)
+      const relative = path.relative(root, absolute).split(path.sep).join('/')
+      return { ...item, wasmUrl: `/${relative}` }
+    }),
   }
 
   const server = await startServer()

@@ -8,8 +8,8 @@ Compares the same scalar workloads across three execution paths:
 | Wasmtime | `benchmarks/harness` (Rust, `wasmtime` crate) | Native wasm runtime            |
 | Browser  | `benchmarks/browser` (Playwright + Chromium)  | The demo worker runtime (V8)   |
 
-`benchmarks/bench.json` defines iterations, warmup, and cases. `wasm` is resolved
-relative to the config file.
+`benchmarks/bench.json` defines iterations, warmup, and cases. Each case names
+the `wasm` module it runs, resolved relative to the config file.
 
 ## Run
 

@@ -4,7 +4,22 @@ version = "0.1.0"
 edition = "2024"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["rlib"]
+
+[dependencies]
+add = { path = "add" }
+fib = { path = "fib" }
+monte_carlo_pi = { path = "monte_carlo_pi" }
+prime_count = { path = "prime_count" }
+
+[workspace]
+members = [
+  "add",
+  "fib",
+  "monte_carlo_pi",
+  "prime_count",
+  "wordcount",
+]
 
 [profile.release]
 opt-level = 3

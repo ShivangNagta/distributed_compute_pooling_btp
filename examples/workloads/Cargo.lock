@@ -3,5 +3,31 @@
 version = 4
 
 [[package]]
+name = "add"
+version = "0.1.0"
+
+[[package]]
+name = "fib"
+version = "0.1.0"
+
+[[package]]
+name = "monte_carlo_pi"
+version = "0.1.0"
+
+[[package]]
+name = "prime_count"
+version = "0.1.0"
+
+[[package]]
+name = "wordcount"
+version = "0.1.0"
+
+[[package]]
 name = "workloads"
 version = "0.1.0"
+dependencies = [
+ "add",
+ "fib",
+ "monte_carlo_pi",
+ "prime_count",
+]

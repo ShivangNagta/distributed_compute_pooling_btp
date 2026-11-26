@@ -3,6 +3,10 @@
 version = 4
 
 [[package]]
+name = "add"
+version = "0.1.0"
+
+[[package]]
 name = "addr2line"
 version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -411,6 +415,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "fib"
+version = "0.1.0"
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -703,6 +711,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "monte_carlo_pi"
+version = "0.1.0"
+
+[[package]]
 name = "multiversion_no_op"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -765,6 +777,10 @@ dependencies = [
  "embedded-io 0.6.1",
  "serde",
 ]
+
+[[package]]
+name = "prime_count"
+version = "0.1.0"
 
 [[package]]
 name = "proc-macro2"
@@ -1554,6 +1570,12 @@ dependencies = [
 [[package]]
 name = "workloads"
 version = "0.1.0"
+dependencies = [
+ "add",
+ "fib",
+ "monte_carlo_pi",
+ "prime_count",
+]
 
 [[package]]
 name = "zmij"

@@ -53,16 +53,18 @@
       }
 
       window.runBench = async function runBench(config) {
-        const response = await fetch(config.wasmUrl)
-        if (!response.ok)
-          throw new Error('wasm fetch failed: ' + response.status)
-        const bytes = new Uint8Array(await response.arrayBuffer())
-
-        statusEl.textContent = 'loaded wasm (' + bytes.length + ' bytes)'
         const cases = []
 
         for (const item of config.cases) {
-          statusEl.textContent = 'benchmarking ' + item.id
+          statusEl.textContent = 'loading ' + item.wasmUrl
+          const response = await fetch(item.wasmUrl)
+          if (!response.ok)
+            throw new Error(
+              'wasm fetch failed: ' + response.status + ' for ' + item.wasmUrl,
+            )
+          const bytes = new Uint8Array(await response.arrayBuffer())
+          statusEl.textContent =
+            'benchmarking ' + item.id + ' (' + bytes.length + ' bytes)'
 
           const compileStart = performance.now()
           const module = await WebAssembly.compile(bytes)
@@ -104,6 +106,7 @@
             id: item.id,
             entry: item.entry,
             args: item.args,
+            wasmUrl: item.wasmUrl,
             result,
             warm: {
               compile_ms: round(compileMs),
@@ -123,7 +126,6 @@
           mode: 'browser',
           iterations: config.iterations,
           warmup: config.warmup,
-          wasmUrl: config.wasmUrl,
           userAgent: navigator.userAgent,
           hardwareConcurrency: navigator.hardwareConcurrency || null,
           cases,

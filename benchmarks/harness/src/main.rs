@@ -11,7 +11,6 @@ use wasmtime::{Engine, Instance, Module, Store};
 struct BenchConfig {
     iterations: u32,
     warmup: u32,
-    wasm: String,
     cases: Vec<Case>,
 }
 
@@ -20,6 +19,7 @@ struct Case {
     id: String,
     entry: String,
     args: Vec<f64>,
+    wasm: String,
 }
 
 fn main() -> ExitCode {
@@ -236,13 +236,14 @@ fn call_wasmtime(
 }
 
 fn run_wasmtime(config: &BenchConfig, config_path: &Path) -> Result<Value, String> {
-    let wasm_path = resolve_wasm(config_path, &config.wasm);
-    let bytes = std::fs::read(&wasm_path)
-        .map_err(|error| format!("read {}: {error}", wasm_path.display()))?;
     let engine = Engine::default();
 
     let mut cases = Vec::new();
     for case in &config.cases {
+        let wasm_path = resolve_wasm(config_path, &case.wasm);
+        let bytes = std::fs::read(&wasm_path)
+            .map_err(|error| format!("read {}: {error}", wasm_path.display()))?;
+
         let start = Instant::now();
         let module = Module::new(&engine, &bytes).map_err(|error| error.to_string())?;
         let compile_ms = ms(start.elapsed());
@@ -294,6 +295,7 @@ fn run_wasmtime(config: &BenchConfig, config_path: &Path) -> Result<Value, Strin
             "id": case.id,
             "entry": case.entry,
             "args": case.args,
+            "wasm": case.wasm,
             "result": result,
             "warm": {
                 "compile_ms": round(compile_ms),
@@ -312,7 +314,6 @@ fn run_wasmtime(config: &BenchConfig, config_path: &Path) -> Result<Value, Strin
         "mode": "wasmtime",
         "iterations": config.iterations,
         "warmup": config.warmup,
-        "wasm": wasm_path.display().to_string(),
         "cases": cases,
     }))
 }

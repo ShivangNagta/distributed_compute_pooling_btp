@@ -37,19 +37,16 @@ export interface WorkloadExample {
 
 export const CUSTOM_EXAMPLE_ID = '__custom__'
 
-const RUST_MODULE = '/examples/workloads.wasm'
-const RUST_SOURCE = '/examples/src/workloads.rs'
-
 export const EXAMPLES: WorkloadExample[] = [
   {
     id: 'add',
     title: 'Add two integers',
     description: 'Sanity check: calls add(a, b) on a single worker.',
     language: 'rust',
-    module: RUST_MODULE,
+    module: '/examples/add.wasm',
     entryPoint: 'add',
     resultType: 'i32',
-    sourceUrl: RUST_SOURCE,
+    sourceUrl: '/examples/src/add.rs',
     args: [
       { key: 'a', label: 'a', type: 'i32', default: 7 },
       { key: 'b', label: 'b', type: 'i32', default: 5 },
@@ -61,10 +58,10 @@ export const EXAMPLES: WorkloadExample[] = [
     description:
       'Computes fib(n) with wrapping u32 arithmetic. Cost is linear in n.',
     language: 'rust',
-    module: RUST_MODULE,
+    module: '/examples/fib.wasm',
     entryPoint: 'fib',
     resultType: 'u32',
-    sourceUrl: RUST_SOURCE,
+    sourceUrl: '/examples/src/fib.rs',
     args: [
       {
         key: 'n',
@@ -82,10 +79,10 @@ export const EXAMPLES: WorkloadExample[] = [
     description:
       'Counts primes in [start, end). Split the range across workers and sum the counts.',
     language: 'rust',
-    module: RUST_MODULE,
+    module: '/examples/prime_count.wasm',
     entryPoint: 'prime_count_range',
     resultType: 'u32',
-    sourceUrl: RUST_SOURCE,
+    sourceUrl: '/examples/src/prime_count.rs',
     split: { kind: 'range', startKey: 'start', endKey: 'end', combine: 'sum' },
     args: [
       { key: 'start', label: 'start', type: 'u32', default: 0, min: 0 },
@@ -98,10 +95,10 @@ export const EXAMPLES: WorkloadExample[] = [
     description:
       'Estimates Pi. Split the iterations across workers and average the estimates.',
     language: 'rust',
-    module: RUST_MODULE,
+    module: '/examples/monte_carlo_pi.wasm',
     entryPoint: 'monte_carlo_pi',
     resultType: 'f64',
-    sourceUrl: RUST_SOURCE,
+    sourceUrl: '/examples/src/monte_carlo_pi.rs',
     split: { kind: 'iterations', iterationsKey: 'iterations', combine: 'mean' },
     args: [
       {
@@ -159,11 +156,11 @@ export const EXAMPLES: WorkloadExample[] = [
     description:
       'Counts word frequencies in a text file. Splits lines across workers and merges the counts.',
     language: 'rust',
-    module: RUST_MODULE,
+    module: '/examples/wordcount.wasm',
     entryPoint: 'count_words',
     resultType: 'u32',
     input: 'text-file',
-    sourceUrl: RUST_SOURCE,
+    sourceUrl: '/examples/src/wordcount.rs',
     args: [],
   },
   {

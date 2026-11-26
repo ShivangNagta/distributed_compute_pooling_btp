@@ -1,14 +1,24 @@
 {
   "iterations": 5,
   "warmup": 2,
-  "wasm": "../ui/public/examples/workloads.wasm",
   "cases": [
-    { "id": "fib", "entry": "fib", "args": [1000000] },
-    { "id": "prime_count", "entry": "prime_count", "args": [2000000] },
+    {
+      "id": "fib",
+      "entry": "fib",
+      "args": [1000000],
+      "wasm": "../ui/public/examples/fib.wasm"
+    },
+    {
+      "id": "prime_count",
+      "entry": "prime_count",
+      "args": [2000000],
+      "wasm": "../ui/public/examples/prime_count.wasm"
+    },
     {
       "id": "monte_carlo_pi",
       "entry": "monte_carlo_pi",
-      "args": [5000000, 12345]
+      "args": [5000000, 12345],
+      "wasm": "../ui/public/examples/monte_carlo_pi.wasm"
     }
   ]
 }

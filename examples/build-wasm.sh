@@ -8,14 +8,27 @@ OUT="$ROOT/ui/public/examples"
 SRC_OUT="$OUT/src"
 mkdir -p "$OUT" "$SRC_OUT"
 
+RUST_WORKLOADS=(add fib prime_count monte_carlo_pi wordcount)
+
 echo "Building Rust workloads..."
+args=()
+for name in "${RUST_WORKLOADS[@]}"; do
+  args+=(-p "$name")
+done
 cargo build \
   --manifest-path "$ROOT/examples/workloads/Cargo.toml" \
   --release \
-  --target wasm32-unknown-unknown
-cp "$ROOT/examples/workloads/target/wasm32-unknown-unknown/release/workloads.wasm" \
-  "$OUT/workloads.wasm"
-cp "$ROOT/examples/workloads/src/lib.rs" "$SRC_OUT/workloads.rs"
+  --target wasm32-unknown-unknown \
+  "${args[@]}"
+
+for name in "${RUST_WORKLOADS[@]}"; do
+  cp "$ROOT/examples/workloads/target/wasm32-unknown-unknown/release/$name.wasm" \
+    "$OUT/$name.wasm"
+  cp "$ROOT/examples/workloads/$name/src/lib.rs" "$SRC_OUT/$name.rs"
+done
+
+# Drop the old single-module artifacts if they are still around.
+rm -f "$OUT/workloads.wasm" "$SRC_OUT/workloads.rs"
 
 if command -v emcc >/dev/null 2>&1; then
   echo "Building C workloads..."

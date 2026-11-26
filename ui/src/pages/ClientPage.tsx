@@ -619,6 +619,34 @@ function ClientPage({ onBack }: { onBack: () => void }) {
     }
   }
 
+  const deleteRoom = async (roomId: string) => {
+    setError(null)
+    setStatus('Deleting room...')
+    try {
+      const response = await fetch(
+        `${COORDINATOR_URL}/rooms/${encodeURIComponent(roomId)}`,
+        {
+          method: 'DELETE',
+        },
+      )
+      if (!response.ok) {
+        throw new Error(`Room deletion failed (${response.status})`)
+      }
+      setRooms((current) => current.filter((room) => room.id !== roomId))
+      if (activeRoomId === roomId) {
+        setActiveRoomId(null)
+      }
+      setStatus(`Room ${roomId} deleted successfully.`)
+    } catch (requestError) {
+      const message =
+        requestError instanceof Error
+          ? requestError.message
+          : 'Unable to delete room.'
+      setError(message)
+      setStatus(message)
+    }
+  }
+
   const onExampleChange = (value: string) => {
     setExampleId(value)
     setSubmitError(null)
@@ -1079,6 +1107,13 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                         >
                           {room.workers.length} workers
                         </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void deleteRoom(room.id)}
+                        className="mt-2 w-full text-left text-xs text-danger hover:underline"
+                      >
+                        Delete room
                       </button>
                     </li>
                   )

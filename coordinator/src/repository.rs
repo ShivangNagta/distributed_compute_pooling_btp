@@ -87,6 +87,24 @@ impl Repository {
         Ok(rows.iter().map(row_to_room).collect())
     }
 
+    pub async fn delete_room(&self, id: &str) -> Result<(), AppError> {
+        let mut tx = self.pool.begin().await?;
+        sqlx::query("DELETE FROM tasks WHERE job_id IN (SELECT id FROM jobs WHERE room_id = ?1)")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM jobs WHERE room_id = ?1")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM rooms WHERE id = ?1")
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub async fn close_room(&self, id: &str) -> Result<(), AppError> {
         sqlx::query("UPDATE rooms SET status = ?1 WHERE id = ?2")
             .bind(RoomStatus::Closed.as_str())

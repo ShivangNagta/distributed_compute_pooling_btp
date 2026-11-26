@@ -52,6 +52,14 @@ pub async fn list_passwordless_rooms_handler(
     Ok(Json(rooms))
 }
 
+pub async fn delete_room_handler(
+    State(state): State<AppState>,
+    Path(room_id): Path<String>,
+) -> Result<StatusCode, AppError> {
+    state.repo.delete_room(&room_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn ws_handler(
     State(state): State<AppState>,
     Path((room_id, client_token)): Path<(String, String)>,

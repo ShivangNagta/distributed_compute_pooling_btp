@@ -187,6 +187,10 @@ pub fn passwordless_worker_token() -> String {
     std::env::var("PASSWORDLESS_WORKER_TOKEN").unwrap_or_else(|_| "passwordless-worker".to_string())
 }
 
+pub async fn delete_room(state: &AppState, room_id: &str) -> Result<(), AppError> {
+    state.repo.delete_room(room_id).await
+}
+
 pub async fn close_room(state: &AppState, room_id: &str) -> Result<(), AppError> {
     state.repo.close_room(room_id).await
 }
@@ -427,6 +431,20 @@ mod tests {
         let (state, _dir) = test_state().await;
         let room = create_room(&state, false).await.unwrap();
         assert_ne!(room.worker_token, passwordless_worker_token());
+    }
+
+    #[tokio::test]
+    async fn delete_room_removes_room_and_jobs() {
+        let (state, _dir) = test_state().await;
+        let room = create_room(&state, false).await.unwrap();
+        let job = sample_job(&room.id);
+        state
+            .repo
+            .create_job(&job, &[sample_task(&job.id)])
+            .await
+            .unwrap();
+        delete_room(&state, &room.id).await.unwrap();
+        assert!(state.repo.get_room(&room.id).await.unwrap().is_none());
     }
 
     #[tokio::test]

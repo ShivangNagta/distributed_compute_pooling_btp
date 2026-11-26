@@ -7,7 +7,7 @@ use axum::{
     Router,
     extract::DefaultBodyLimit,
     http::header::{AUTHORIZATION, CONTENT_TYPE},
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use tower_http::cors::{Any, CorsLayer};
 
@@ -28,6 +28,7 @@ pub fn router(state: AppState) -> Router {
             "/rooms/passwordless",
             get(room::list_passwordless_rooms_handler),
         )
+        .route("/rooms/{room_id}", delete(room::delete_room_handler))
         .route("/ws/{room_id}/{client_token}", get(room::ws_handler))
         .route(
             "/ws/join_room/{room_id}/{room_token}",

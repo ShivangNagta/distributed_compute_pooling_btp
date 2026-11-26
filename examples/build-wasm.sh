@@ -38,10 +38,15 @@ if command -v emcc >/dev/null 2>&1; then
   fi
   while IFS= read -r src; do
     name="$(basename "$src" .c)"
+    extra=""
     case "$name" in
       prime_count) exports='["_prime_count_range","_prime_count"]' ;;
       monte_carlo_pi) exports='["_monte_carlo_pi"]' ;;
       fib) exports='["_fib"]' ;;
+      wordcount)
+        exports='["_alloc","_count_words"]'
+        extra="-sALLOW_MEMORY_GROWTH=1"
+        ;;
       *)
         echo "unknown C workload: $name" >&2
         exit 1
@@ -52,6 +57,7 @@ if command -v emcc >/dev/null 2>&1; then
       --no-entry \
       -sEXPORTED_FUNCTIONS="$exports" \
       -sERROR_ON_UNDEFINED_SYMBOLS=1 \
+      $extra \
       "$src" \
       -o "$OUT/c-$name.wasm"
     cp "$src" "$SRC_OUT/$name.c"

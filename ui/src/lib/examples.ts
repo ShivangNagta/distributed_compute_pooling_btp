@@ -151,6 +151,19 @@ export const EXAMPLES: WorkloadExample[] = [
     ],
   },
   {
+    id: 'c-wordcount',
+    title: 'Word count (C, distributed)',
+    description:
+      'The same line-split word count written in freestanding C, with ASCII lowercasing.',
+    language: 'c',
+    module: '/examples/c-wordcount.wasm',
+    entryPoint: 'count_words',
+    resultType: 'u32',
+    input: 'text-file',
+    sourceUrl: '/examples/src/wordcount.c',
+    args: [],
+  },
+  {
     id: 'wordcount',
     title: 'Word count (distributed)',
     description:

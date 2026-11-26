@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { Task } from '../types'
 import { sampleArtifact } from './sample'
-import { runWasmTask } from './wasm'
+import { readCString, runWasmTask } from './wasm'
 
 function task(input: unknown): Task {
   return {
@@ -33,5 +33,19 @@ describe('runWasmTask', () => {
     await expect(
       runWasmTask({ entry_point: 'add', files: [] }, task([1, 2])),
     ).rejects.toThrow()
+  })
+
+  it('requires alloc and memory exports for bytes input', async () => {
+    await expect(
+      runWasmTask(sampleArtifact(), task({ text_base64: 'aGk=' })),
+    ).rejects.toThrow(/alloc and memory/)
+  })
+
+  it('reads NUL-terminated result strings', () => {
+    const memory = new WebAssembly.Memory({ initial: 1 })
+    new Uint8Array(memory.buffer).set(
+      new TextEncoder().encode('{"a":1}\u0000ignored'),
+    )
+    expect(readCString(memory, 0)).toBe('{"a":1}')
   })
 })

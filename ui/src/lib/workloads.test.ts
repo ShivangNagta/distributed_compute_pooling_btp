@@ -4,8 +4,11 @@ import { findExample } from './examples'
 import {
   buildTaskInputs,
   combineResults,
+  combineWordCounts,
   formatResult,
   splitRange,
+  splitTextIntoShards,
+  wordCountTotal,
   validateValues,
 } from './workloads'
 
@@ -86,6 +89,52 @@ describe('buildTaskInputs', () => {
     expect(() =>
       buildTaskInputs(example('prime-count'), { start: 10, end: 1 }, 2),
     ).toThrow()
+  })
+})
+
+describe('splitTextIntoShards', () => {
+  it('splits on line boundaries across workers', () => {
+    expect(splitTextIntoShards('a\nb\nc\nd\n', 2)).toEqual(['a\nb\n', 'c\nd\n'])
+  })
+
+  it('keeps a single shard for one worker', () => {
+    expect(splitTextIntoShards('a\nb', 1)).toEqual(['a\nb'])
+  })
+
+  it('never splits a line', () => {
+    for (const shard of splitTextIntoShards('one\ntwo\nthree\nfour\n', 3)) {
+      expect(shard.endsWith('\n')).toBe(true)
+    }
+  })
+})
+
+describe('combineWordCounts', () => {
+  it('sums counts across shards and ranks the top words', () => {
+    const summary = combineWordCounts(
+      [
+        { hello: 2, world: 1 },
+        { hello: 3, rust: 4 },
+      ],
+      2,
+    )
+    expect(summary).toEqual({
+      total: 10,
+      unique: 3,
+      top: [
+        { word: 'hello', count: 5 },
+        { word: 'rust', count: 4 },
+      ],
+    })
+  })
+
+  it('ignores malformed results', () => {
+    expect(combineWordCounts([null, 'nope', [1], { ok: 1 }])).toEqual({
+      total: 1,
+      unique: 1,
+      top: [{ word: 'ok', count: 1 }],
+    })
+    expect(wordCountTotal({ a: 2, b: 3 })).toBe(5)
+    expect(wordCountTotal('nope')).toBe(0)
   })
 })
 

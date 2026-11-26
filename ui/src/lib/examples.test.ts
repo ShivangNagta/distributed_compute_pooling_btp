@@ -51,5 +51,6 @@ describe('workload catalog', () => {
       true,
     )
     expect(isSplittable(EXAMPLES.find((e) => e.id === 'add')!)).toBe(false)
+    expect(isSplittable(EXAMPLES.find((e) => e.id === 'wordcount')!)).toBe(true)
   })
 })

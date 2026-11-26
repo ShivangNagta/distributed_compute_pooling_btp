@@ -80,6 +80,76 @@ export function splitRange(
   })
 }
 
+/// Splits text into `parts` shards along line boundaries so words are never
+/// cut in half. Shorter inputs return fewer shards than requested.
+export function splitTextIntoShards(text: string, parts: number): string[] {
+  if (text.length === 0) {
+    return ['']
+  }
+  const count = Math.max(1, Math.floor(parts))
+  if (count === 1) {
+    return [text]
+  }
+
+  const lineStarts = [0]
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] === '\n' && index + 1 < text.length) {
+      lineStarts.push(index + 1)
+    }
+  }
+
+  const shards: string[] = []
+  for (let index = 0; index < count; index += 1) {
+    const from = Math.floor((lineStarts.length * index) / count)
+    const to = Math.floor((lineStarts.length * (index + 1)) / count)
+    const start = lineStarts[from]
+    const end = to < lineStarts.length ? lineStarts[to] : text.length
+    shards.push(text.slice(start, end))
+  }
+  return shards.filter((shard) => shard.length > 0)
+}
+
+export type WordCountSummary = {
+  total: number
+  unique: number
+  top: Array<{ word: string; count: number }>
+}
+
+function wordCountEntries(result: unknown): Array<[string, number]> {
+  if (result === null || typeof result !== 'object' || Array.isArray(result)) {
+    return []
+  }
+  return Object.entries(result as Record<string, unknown>).filter(
+    (entry): entry is [string, number] =>
+      typeof entry[1] === 'number' && Number.isFinite(entry[1]),
+  )
+}
+
+export function wordCountTotal(result: unknown): number {
+  return wordCountEntries(result).reduce((total, [, count]) => total + count, 0)
+}
+
+/// Merges per-shard `{ word: count }` maps by summing counts and returns the
+/// most frequent words.
+export function combineWordCounts(
+  results: unknown[],
+  topK = 10,
+): WordCountSummary {
+  const merged = new Map<string, number>()
+  for (const result of results) {
+    for (const [word, count] of wordCountEntries(result)) {
+      merged.set(word, (merged.get(word) ?? 0) + count)
+    }
+  }
+
+  const entries = [...merged.entries()].sort((a, b) => b[1] - a[1])
+  return {
+    total: entries.reduce((total, [, count]) => total + count, 0),
+    unique: entries.length,
+    top: entries.slice(0, topK).map(([word, count]) => ({ word, count })),
+  }
+}
+
 /**
  * Builds one positional argument list per worker. Non-splittable examples
  * always return a single input.

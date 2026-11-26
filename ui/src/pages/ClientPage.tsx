@@ -16,6 +16,7 @@ import {
   EXAMPLES,
   defaultValueMap,
   findExample,
+  isSplittable,
   loadExampleArtifact,
   loadSource,
   type WorkloadExample,
@@ -38,8 +39,12 @@ import { jobStatusTone, statusTone, taskStatusTone } from '../lib/status'
 import {
   buildTaskInputs,
   combineResults,
+  combineWordCounts,
   formatResult,
+  splitTextIntoShards,
   validateValues,
+  wordCountTotal,
+  type WordCountSummary,
 } from '../lib/workloads'
 import {
   loadActiveRoomId,
@@ -332,7 +337,13 @@ type RunResult = {
   jobId: string
   context: RunContext
   record: JobRecord
-  combined: number | null
+  combined: number | WordCountSummary | null
+}
+
+function isWordCountSummary(
+  value: number | WordCountSummary | null,
+): value is WordCountSummary {
+  return value !== null && typeof value === 'object'
 }
 
 function RunResultCard({ run }: { run: RunResult }) {
@@ -348,9 +359,31 @@ function RunResultCard({ run }: { run: RunResult }) {
             : 'single worker'}
         </span>
       </div>
-      <div className="mono mt-1 text-2xl font-semibold text-tx-primary">
-        {formatResult(run.combined, run.context.example.resultType)}
-      </div>
+      {isWordCountSummary(run.combined) ? (
+        <div className="mt-1">
+          <div className="mono text-2xl font-semibold text-tx-primary">
+            {run.combined.total.toLocaleString()} words ·{' '}
+            {run.combined.unique.toLocaleString()} unique
+          </div>
+          <ol className="mt-2 space-y-1 text-sm text-tx-secondary">
+            {run.combined.top.map((entry) => (
+              <li
+                key={entry.word}
+                className="flex items-center justify-between gap-3"
+              >
+                <span className="mono truncate text-tx-primary">
+                  {entry.word}
+                </span>
+                <span className="mono">{entry.count.toLocaleString()}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : (
+        <div className="mono mt-1 text-2xl font-semibold text-tx-primary">
+          {formatResult(run.combined, run.context.example.resultType)}
+        </div>
+      )}
       <div className="mt-2 space-y-1 text-xs text-tx-secondary">
         {run.record.tasks.map((task) => (
           <div
@@ -365,12 +398,14 @@ function RunResultCard({ run }: { run: RunResult }) {
             >
               {task.status === 'failed'
                 ? `Error: ${task.error ?? 'failed'}`
-                : formatResult(
-                    typeof task.result === 'number'
-                      ? task.result
-                      : Number(task.result),
-                    run.context.example.resultType,
-                  )}
+                : run.context.example.input === 'text-file'
+                  ? `${wordCountTotal(task.result).toLocaleString()} words`
+                  : formatResult(
+                      typeof task.result === 'number'
+                        ? task.result
+                        : Number(task.result),
+                      run.context.example.resultType,
+                    )}
               {task.execution_time_ms != null
                 ? ` · ${task.execution_time_ms} ms`
                 : ''}
@@ -414,6 +449,8 @@ function ClientPage({ onBack }: { onBack: () => void }) {
   const [wasmBase64, setWasmBase64] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
   const [inputText, setInputText] = useState('[1, 2]')
+  const [corpusText, setCorpusText] = useState<string | null>(null)
+  const [corpusFileName, setCorpusFileName] = useState<string | null>(null)
   const [selectedWorkers, setSelectedWorkers] = useState<Set<string>>(new Set())
   const [jobType, setJobType] = useState<'wasm' | 'wgpu'>('wasm')
   const [wgpuMode, setWgpuMode] = useState<'fragment' | 'image_processing'>(
@@ -698,6 +735,32 @@ function ClientPage({ onBack }: { onBack: () => void }) {
     reader.readAsDataURL(file)
   }
 
+  const onCorpusSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    if (file.size === 0) {
+      setSubmitError('The selected text file is empty.')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const text = typeof reader.result === 'string' ? reader.result : null
+      if (text === null) {
+        setSubmitError('Could not read the selected text file.')
+        return
+      }
+      setCorpusText(text)
+      setCorpusFileName(file.name)
+      setSubmitError(null)
+    }
+    reader.onerror = () =>
+      setSubmitError('Could not read the selected text file.')
+    reader.readAsText(file)
+  }
+
   const onShaderSelected = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
@@ -917,7 +980,7 @@ function ClientPage({ onBack }: { onBack: () => void }) {
         if (valueError) {
           throw new Error(valueError)
         }
-        const useSplit = runMode === 'split' && example.split !== undefined
+        const useSplit = runMode === 'split' && isSplittable(example)
         const workerIds = useSplit
           ? selected.length > 0
             ? selected
@@ -928,20 +991,43 @@ function ClientPage({ onBack }: { onBack: () => void }) {
         if (workerIds.length === 0) {
           throw new Error('Connect a worker first.')
         }
-        const inputs = buildTaskInputs(
-          example,
-          exampleValues,
-          useSplit ? workerIds.length : 1,
-        )
         artifact = await loadExampleArtifact(example)
-        requestBody = {
-          name,
-          artifact,
-          tasks: workerIds.map((workerId, index) => ({
-            worker_id: workerId,
-            input: inputs[index] ?? inputs[0],
-          })),
-          metadata: {},
+
+        if (example.input === 'text-file') {
+          if (!corpusText || corpusText.trim() === '') {
+            throw new Error('Choose a text file to process.')
+          }
+          const shards = useSplit
+            ? splitTextIntoShards(corpusText, workerIds.length)
+            : [corpusText]
+          requestBody = {
+            name,
+            artifact,
+            tasks: workerIds.slice(0, shards.length).map((workerId, index) => ({
+              worker_id: workerId,
+              input: {
+                text_base64: bytesToBase64(
+                  new TextEncoder().encode(shards[index]),
+                ),
+              },
+            })),
+            metadata: {},
+          }
+        } else {
+          const inputs = buildTaskInputs(
+            example,
+            exampleValues,
+            useSplit ? workerIds.length : 1,
+          )
+          requestBody = {
+            name,
+            artifact,
+            tasks: workerIds.map((workerId, index) => ({
+              worker_id: workerId,
+              input: inputs[index] ?? inputs[0],
+            })),
+            metadata: {},
+          }
         }
         runContext = {
           example,
@@ -1016,18 +1102,26 @@ function ClientPage({ onBack }: { onBack: () => void }) {
       (task) => task.status === 'completed' || task.status === 'failed',
     )
     if (!finished) return []
-    const results = record.tasks
+    const completed = record.tasks
       .filter((task) => task.status === 'completed')
-      .map((task) =>
-        typeof task.result === 'number' ? task.result : Number(task.result),
-      )
-      .filter((value) => Number.isFinite(value))
+      .map((task) => task.result)
+    const combined =
+      context.example.input === 'text-file'
+        ? combineWordCounts(completed)
+        : combineResults(
+            context.example,
+            completed
+              .map((result) =>
+                typeof result === 'number' ? result : Number(result),
+              )
+              .filter((value) => Number.isFinite(value)),
+          )
     return [
       {
         jobId: record.job.id,
         context,
         record,
-        combined: combineResults(context.example, results),
+        combined,
       },
     ]
   })
@@ -1386,37 +1480,68 @@ function ClientPage({ onBack }: { onBack: () => void }) {
 
                 {example ? (
                   <>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      {example.args.map((arg) => (
-                        <div key={arg.key}>
-                          <label className="label" htmlFor={`arg-${arg.key}`}>
-                            {arg.label}
-                          </label>
+                    {example.args.length > 0 ? (
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        {example.args.map((arg) => (
+                          <div key={arg.key}>
+                            <label className="label" htmlFor={`arg-${arg.key}`}>
+                              {arg.label}
+                            </label>
+                            <input
+                              id={`arg-${arg.key}`}
+                              className="input mono"
+                              type="number"
+                              inputMode={
+                                arg.type === 'f64' ? 'decimal' : 'numeric'
+                              }
+                              min={arg.min}
+                              max={arg.max}
+                              step={
+                                arg.step ?? (arg.type === 'f64' ? 'any' : 1)
+                              }
+                              value={
+                                Number.isFinite(exampleValues[arg.key])
+                                  ? exampleValues[arg.key]
+                                  : arg.default
+                              }
+                              onChange={(event) =>
+                                setExampleValues((current) => ({
+                                  ...current,
+                                  [arg.key]: event.target.valueAsNumber,
+                                }))
+                              }
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {example.input === 'text-file' ? (
+                      <div>
+                        <span className="label">Text file</span>
+                        <div className="flex flex-wrap items-center gap-2">
                           <input
-                            id={`arg-${arg.key}`}
-                            className="input mono"
-                            type="number"
-                            inputMode={
-                              arg.type === 'f64' ? 'decimal' : 'numeric'
-                            }
-                            min={arg.min}
-                            max={arg.max}
-                            step={arg.step ?? (arg.type === 'f64' ? 'any' : 1)}
-                            value={
-                              Number.isFinite(exampleValues[arg.key])
-                                ? exampleValues[arg.key]
-                                : arg.default
-                            }
-                            onChange={(event) =>
-                              setExampleValues((current) => ({
-                                ...current,
-                                [arg.key]: event.target.valueAsNumber,
-                              }))
-                            }
+                            type="file"
+                            accept=".txt,.csv,.log,text/plain"
+                            onChange={onCorpusSelected}
+                            className="file-input"
                           />
+                          {corpusFileName ? (
+                            <span className="text-sm text-tx-primary">
+                              {corpusFileName} · loaded
+                            </span>
+                          ) : (
+                            <span className="text-xs text-tx-muted">
+                              Choose a plain-text file to count words in.
+                            </span>
+                          )}
                         </div>
-                      ))}
-                    </div>
+                        <p className="mt-1 text-xs text-tx-muted">
+                          Split mode divides the file at line boundaries across
+                          workers and merges the per-worker counts.
+                        </p>
+                      </div>
+                    ) : null}
 
                     <div>
                       <span className="label">Parallelism</span>
@@ -1430,7 +1555,7 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                         </button>
                         <button
                           type="button"
-                          disabled={!example.split}
+                          disabled={!isSplittable(example)}
                           onClick={() => setRunMode('split')}
                           className={`btn ${runMode === 'split' ? 'btn-primary' : 'btn-secondary'}`}
                         >
@@ -1438,7 +1563,7 @@ function ClientPage({ onBack }: { onBack: () => void }) {
                         </button>
                       </div>
                       <p className="mt-1 text-xs text-tx-muted">
-                        {example.split
+                        {isSplittable(example)
                           ? 'Split mode partitions the input across all connected workers (or the selected ones) and combines the results.'
                           : 'This workload runs on a single worker.'}
                       </p>

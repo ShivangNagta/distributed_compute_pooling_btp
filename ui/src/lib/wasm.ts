@@ -85,6 +85,14 @@ export async function runWasmTask(
     throw new Error(`export "${artifact.entry_point}" not found`)
   }
 
+  if (isTextInput(task.input)) {
+    return runBytesEntry(
+      exports,
+      entry as (pointer: number, length: number) => number,
+      task.input.text_base64,
+    )
+  }
+
   const args = Array.isArray(task.input) ? task.input : [task.input]
   const started = performance.now()
   const result = (entry as (...a: unknown[]) => unknown)(...args)
@@ -93,6 +101,54 @@ export async function runWasmTask(
     result: toJsonSafe(result),
     execution_time_ms: Math.round(performance.now() - started),
   }
+}
+
+type TextInput = { text_base64: string }
+
+function isTextInput(input: unknown): input is TextInput {
+  return (
+    input !== null &&
+    typeof input === 'object' &&
+    typeof (input as { text_base64?: unknown }).text_base64 === 'string'
+  )
+}
+
+/// Calls a bytes-oriented export: the host writes the input into linear memory
+/// with `alloc`, then reads a NUL-terminated JSON result from the returned
+/// pointer. Used by workloads that process files instead of scalar arguments.
+function runBytesEntry(
+  exports: Record<string, unknown>,
+  entry: (pointer: number, length: number) => number,
+  encoded: string,
+): TaskOutcome {
+  const memory = exports.memory
+  const alloc = exports.alloc
+  if (!(memory instanceof WebAssembly.Memory) || typeof alloc !== 'function') {
+    throw new Error('bytes input requires alloc and memory exports')
+  }
+
+  const bytes = base64ToBytes(encoded)
+  const pointer = (alloc as (length: number) => number)(bytes.length)
+  new Uint8Array(memory.buffer, pointer, bytes.length).set(bytes)
+
+  const started = performance.now()
+  const resultPointer = entry(pointer, bytes.length)
+  const text = readCString(memory, resultPointer)
+
+  return {
+    result: JSON.parse(text),
+    execution_time_ms: Math.round(performance.now() - started),
+  }
+}
+
+export function readCString(
+  memory: WebAssembly.Memory,
+  pointer: number,
+): string {
+  const view = new Uint8Array(memory.buffer)
+  let end = pointer
+  while (end < view.length && view[end] !== 0) end += 1
+  return new TextDecoder().decode(view.subarray(pointer, end))
 }
 
 /// WebAssembly i64 values surface as BigInt, which JSON.stringify rejects.

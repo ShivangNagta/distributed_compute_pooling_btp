@@ -30,6 +30,8 @@ export interface WorkloadExample {
   resultType: ResultType
   args: WorkloadArg[]
   split?: SplitPolicy
+  /// When set, the workload takes file bytes instead of scalar arguments.
+  input?: 'text-file'
   sourceUrl: string
 }
 
@@ -196,6 +198,19 @@ export const EXAMPLES: WorkloadExample[] = [
     ],
   },
   {
+    id: 'wordcount',
+    title: 'Word count (distributed)',
+    description:
+      'Counts word frequencies in a text file. Splits lines across workers and merges the counts.',
+    language: 'rust',
+    module: RUST_MODULE,
+    entryPoint: 'count_words',
+    resultType: 'u32',
+    input: 'text-file',
+    sourceUrl: RUST_SOURCE,
+    args: [],
+  },
+  {
     id: 'c-fib',
     title: 'Fibonacci (C)',
     description: 'Iterative Fibonacci written in freestanding C.',
@@ -228,7 +243,7 @@ export function defaultValueMap(
 }
 
 export function isSplittable(example: WorkloadExample): boolean {
-  return example.split !== undefined
+  return example.split !== undefined || example.input === 'text-file'
 }
 
 const moduleCache = new Map<string, Promise<string>>()

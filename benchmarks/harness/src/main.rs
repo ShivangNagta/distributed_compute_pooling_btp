@@ -130,11 +130,6 @@ fn call_native(entry: &str, args: &[f64]) -> Result<f64, String> {
         "prime_count" => workloads::prime_count(u(0)?) as f64,
         "prime_count_range" => workloads::prime_count_range(u(0)?, u(1)?) as f64,
         "monte_carlo_pi" => workloads::monte_carlo_pi(u(0)?, u(1)?),
-        "matmul_checksum" => workloads::matmul_checksum(u(0)?, u(1)?) as f64,
-        "matmul_checksum_range" => {
-            workloads::matmul_checksum_range(u(0)?, u(1)?, u(2)?, u(3)?) as f64
-        }
-        "hash_chain" => workloads::hash_chain(u(0)?, u(1)?) as f64,
         other => return Err(format!("unknown workload {other}")),
     })
 }
@@ -235,30 +230,6 @@ fn call_wasmtime(
                 .map_err(|error| error.to_string())?;
             func.call(&mut *store, (u(0)?, u(1)?))
                 .map_err(|error| error.to_string())
-        }
-        "matmul_checksum" => {
-            let func = instance
-                .get_typed_func::<(u32, u32), u32>(&mut *store, entry)
-                .map_err(|error| error.to_string())?;
-            Ok(func
-                .call(&mut *store, (u(0)?, u(1)?))
-                .map_err(|error| error.to_string())? as f64)
-        }
-        "matmul_checksum_range" => {
-            let func = instance
-                .get_typed_func::<(u32, u32, u32, u32), u32>(&mut *store, entry)
-                .map_err(|error| error.to_string())?;
-            Ok(func
-                .call(&mut *store, (u(0)?, u(1)?, u(2)?, u(3)?))
-                .map_err(|error| error.to_string())? as f64)
-        }
-        "hash_chain" => {
-            let func = instance
-                .get_typed_func::<(u32, u32), u32>(&mut *store, entry)
-                .map_err(|error| error.to_string())?;
-            Ok(func
-                .call(&mut *store, (u(0)?, u(1)?))
-                .map_err(|error| error.to_string())? as f64)
         }
         other => Err(format!("unknown workload {other}")),
     }

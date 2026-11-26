@@ -73,18 +73,6 @@ describe('buildTaskInputs', () => {
     ])
   })
 
-  it('splits matrix rows', () => {
-    const inputs = buildTaskInputs(
-      example('matmul-checksum'),
-      { n: 10, seed: 1 },
-      2,
-    )
-    expect(inputs).toEqual([
-      [10, 0, 5, 1],
-      [10, 5, 10, 1],
-    ])
-  })
-
   it('rejects reversed ranges', () => {
     expect(() =>
       buildTaskInputs(example('prime-count'), { start: 10, end: 1 }, 2),
@@ -153,14 +141,14 @@ describe('combineResults', () => {
   })
 
   it('normalizes unsigned results and wraps sums', () => {
-    expect(combineResults(example('hash-chain'), [-1])).toBe(4_294_967_295)
-    expect(combineResults(example('matmul-checksum'), [0xffffffff, 2])).toBe(1)
+    expect(combineResults(example('prime-count'), [-1])).toBe(4_294_967_295)
+    expect(combineResults(example('prime-count'), [0xffffffff, 2])).toBe(1)
   })
 })
 
 describe('validateValues', () => {
   it('accepts defaults', () => {
-    for (const id of ['add', 'prime-count', 'matmul-checksum']) {
+    for (const id of ['add', 'prime-count']) {
       const item = example(id)
       const values = Object.fromEntries(
         item.args.map((arg) => [arg.key, arg.default]),

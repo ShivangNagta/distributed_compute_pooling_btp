@@ -103,59 +103,6 @@ pub extern "C" fn monte_carlo_pi(iterations: u32, seed: u32) -> f64 {
     4.0 * f64::from(inside) / f64::from(iterations)
 }
 
-/// Deterministic integer matrix multiply over rows `[start_row, end_row)`.
-/// Returns a wrapping checksum of the result matrix.
-#[unsafe(no_mangle)]
-pub extern "C" fn matmul_checksum_range(n: u32, start_row: u32, end_row: u32, seed: u32) -> u32 {
-    if n == 0 {
-        return 0;
-    }
-    let end = end_row.min(n);
-    let mut checksum = 0u32;
-    let mut row = start_row;
-    while row < end {
-        let mut col = 0u32;
-        while col < n {
-            let mut sum = 0u32;
-            let mut k = 0u32;
-            while k < n {
-                let a = xorshift(
-                    seed ^ row
-                        .wrapping_mul(73_856_093)
-                        .wrapping_add(k.wrapping_mul(19_349_663)),
-                ) & 0xff;
-                let b = xorshift(
-                    seed ^ k
-                        .wrapping_mul(83_492_791)
-                        .wrapping_add(col.wrapping_mul(2_654_435_761)),
-                ) & 0xff;
-                sum = sum.wrapping_add(a.wrapping_mul(b));
-                k += 1;
-            }
-            checksum = checksum.wrapping_add(sum);
-            col += 1;
-        }
-        row += 1;
-    }
-    checksum
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn matmul_checksum(n: u32, seed: u32) -> u32 {
-    matmul_checksum_range(n, 0, n, seed)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn hash_chain(iterations: u32, seed: u32) -> u32 {
-    let mut state = nonzero_seed(seed);
-    let mut i = 0u32;
-    while i < iterations {
-        state = xorshift(state);
-        i += 1;
-    }
-    state
-}
-
 /// Allocates `len` bytes of linear memory so the host can write task input.
 #[unsafe(no_mangle)]
 pub extern "C" fn alloc(len: u32) -> *mut u8 {
@@ -239,20 +186,6 @@ mod tests {
     fn monte_carlo_is_close() {
         let estimate = monte_carlo_pi(2_000_000, 12345);
         assert!((estimate - core::f64::consts::PI).abs() < 0.01);
-    }
-
-    #[test]
-    fn matmul_checksum_ranges_sum() {
-        let whole = matmul_checksum(16, 7);
-        let first = matmul_checksum_range(16, 0, 8, 7);
-        let second = matmul_checksum_range(16, 8, 16, 7);
-        assert_eq!(whole, first.wrapping_add(second));
-    }
-
-    #[test]
-    fn hash_chain_is_deterministic() {
-        assert_eq!(hash_chain(1000, 42), hash_chain(1000, 42));
-        assert_ne!(hash_chain(1000, 42), hash_chain(1000, 43));
     }
 
     #[test]

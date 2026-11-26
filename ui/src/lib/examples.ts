@@ -116,50 +116,6 @@ export const EXAMPLES: WorkloadExample[] = [
     ],
   },
   {
-    id: 'matmul-checksum',
-    title: 'Matrix multiply checksum (distributed)',
-    description:
-      'Deterministic integer matmul; split the rows across workers and sum the checksums.',
-    language: 'rust',
-    module: RUST_MODULE,
-    entryPoint: 'matmul_checksum_range',
-    resultType: 'u32',
-    sourceUrl: RUST_SOURCE,
-    split: { kind: 'rows', rowsKey: 'n', combine: 'sum' },
-    args: [
-      {
-        key: 'n',
-        label: 'n (matrix size)',
-        type: 'u32',
-        default: 96,
-        min: 1,
-        max: 2048,
-      },
-      { key: 'seed', label: 'seed', type: 'u32', default: 1234, min: 0 },
-    ],
-  },
-  {
-    id: 'hash-chain',
-    title: 'Hash chain',
-    description: 'Runs an xorshift chain for the given number of iterations.',
-    language: 'rust',
-    module: RUST_MODULE,
-    entryPoint: 'hash_chain',
-    resultType: 'u32',
-    sourceUrl: RUST_SOURCE,
-    args: [
-      {
-        key: 'iterations',
-        label: 'iterations',
-        type: 'u32',
-        default: 20_000_000,
-        min: 1,
-        max: 500_000_000,
-      },
-      { key: 'seed', label: 'seed', type: 'u32', default: 1, min: 0 },
-    ],
-  },
-  {
     id: 'c-prime-count',
     title: 'Prime count (C, distributed)',
     description:

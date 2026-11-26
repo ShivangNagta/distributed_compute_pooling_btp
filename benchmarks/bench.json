@@ -9,8 +9,6 @@
       "id": "monte_carlo_pi",
       "entry": "monte_carlo_pi",
       "args": [5000000, 12345]
-    },
-    { "id": "matmul_checksum", "entry": "matmul_checksum", "args": [96, 1234] },
-    { "id": "hash_chain", "entry": "hash_chain", "args": [20000000, 1] }
+    }
   ]
 }

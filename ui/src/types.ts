@@ -18,6 +18,17 @@ export interface Capabilities {
   gpu?: GpuInformation | null
 }
 
+export type RoomStatus = 'active' | 'closed'
+
+export interface Room {
+  id: string
+  name: string
+  client_token: string
+  worker_token: string
+  status: RoomStatus
+  created_at: number
+}
+
 export interface Worker {
   id: string
   room_id: string

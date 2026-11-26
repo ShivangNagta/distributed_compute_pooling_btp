@@ -148,7 +148,7 @@ mod tests {
     #[tokio::test]
     async fn get_job_returns_persisted_state() {
         let (state, _dir) = setup().await;
-        let room = service::create_room(&state).await.unwrap();
+        let room = service::create_room(&state, false).await.unwrap();
         let job = seed_job(&state, &room.id).await;
 
         let app = crate::api::router(state);
@@ -170,7 +170,7 @@ mod tests {
     #[tokio::test]
     async fn get_job_requires_auth() {
         let (state, _dir) = setup().await;
-        let room = service::create_room(&state).await.unwrap();
+        let room = service::create_room(&state, false).await.unwrap();
         let job = seed_job(&state, &room.id).await;
 
         let app = crate::api::router(state);
@@ -191,8 +191,8 @@ mod tests {
     #[tokio::test]
     async fn get_job_rejects_wrong_room_for_token() {
         let (state, _dir) = setup().await;
-        let room = service::create_room(&state).await.unwrap();
-        let other = service::create_room(&state).await.unwrap();
+        let room = service::create_room(&state, false).await.unwrap();
+        let other = service::create_room(&state, false).await.unwrap();
         let job = seed_job(&state, &other.id).await;
 
         let app = crate::api::router(state);
@@ -214,7 +214,7 @@ mod tests {
     #[tokio::test]
     async fn submit_job_creates_and_dispatches() {
         let (state, _dir) = setup().await;
-        let room = service::create_room(&state).await.unwrap();
+        let room = service::create_room(&state, false).await.unwrap();
 
         let (tx, _rx) = tokio::sync::mpsc::channel(10);
         state
@@ -252,7 +252,7 @@ mod tests {
     #[tokio::test]
     async fn submit_accepts_request_larger_than_default_body_limit() {
         let (state, _dir) = setup().await;
-        let room = service::create_room(&state).await.unwrap();
+        let room = service::create_room(&state, false).await.unwrap();
         let app = crate::api::router(state);
         let body = serde_json::json!({
             "name": "large image upload",

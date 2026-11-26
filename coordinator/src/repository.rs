@@ -76,6 +76,17 @@ impl Repository {
         Ok(row.as_ref().map(row_to_room))
     }
 
+    pub async fn list_passwordless_rooms(&self, worker_token: &str) -> Result<Vec<Room>, AppError> {
+        let rows = sqlx::query(
+            "SELECT id, name, client_token, worker_token, status, created_at
+             FROM rooms WHERE worker_token = ?1 AND status = 'active'",
+        )
+        .bind(worker_token)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.iter().map(row_to_room).collect())
+    }
+
     pub async fn close_room(&self, id: &str) -> Result<(), AppError> {
         sqlx::query("UPDATE rooms SET status = ?1 WHERE id = ?2")
             .bind(RoomStatus::Closed.as_str())

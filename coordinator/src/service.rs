@@ -165,17 +165,26 @@ pub async fn send_to_client(state: &AppState, client_token: &str, message: &Mess
     }
 }
 
-pub async fn create_room(state: &AppState) -> Result<Room, AppError> {
+pub async fn create_room(state: &AppState, passwordless: bool) -> Result<Room, AppError> {
+    let room_id = Uuid::new_v4().to_string();
     let room = Room {
-        id: Uuid::new_v4().to_string(),
+        id: room_id.clone(),
         name: String::new(),
         client_token: generate_token(),
-        worker_token: generate_token(),
+        worker_token: if passwordless {
+            passwordless_worker_token()
+        } else {
+            generate_token()
+        },
         status: RoomStatus::Active,
         created_at: now_ms(),
     };
     state.repo.create_room(&room).await?;
     Ok(room)
+}
+
+pub fn passwordless_worker_token() -> String {
+    std::env::var("PASSWORDLESS_WORKER_TOKEN").unwrap_or_else(|_| "passwordless-worker".to_string())
 }
 
 pub async fn close_room(state: &AppState, room_id: &str) -> Result<(), AppError> {
@@ -407,9 +416,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn create_passwordless_room_uses_passwordless_worker_token() {
+        let (state, _dir) = test_state().await;
+        let room = create_room(&state, true).await.unwrap();
+        assert_eq!(room.worker_token, passwordless_worker_token());
+    }
+
+    #[tokio::test]
+    async fn create_password_based_room_uses_generated_worker_token() {
+        let (state, _dir) = test_state().await;
+        let room = create_room(&state, false).await.unwrap();
+        assert_ne!(room.worker_token, passwordless_worker_token());
+    }
+
+    #[tokio::test]
     async fn register_then_remove_worker() {
         let (state, _dir) = test_state().await;
-        let room = create_room(&state).await.unwrap();
+        let room = create_room(&state, false).await.unwrap();
 
         let worker = register_worker(&state, &room.id).await.unwrap();
         assert!(state.workers.lock().await.contains_key(&worker.id));
@@ -426,7 +449,7 @@ mod tests {
     #[tokio::test]
     async fn register_rejects_inactive_room() {
         let (state, _dir) = test_state().await;
-        let room = create_room(&state).await.unwrap();
+        let room = create_room(&state, false).await.unwrap();
         close_room(&state, &room.id).await.unwrap();
 
         let err = register_worker(&state, &room.id).await.unwrap_err();
@@ -436,7 +459,7 @@ mod tests {
     #[tokio::test]
     async fn capabilities_message_emits_worker_joined() {
         let (state, _dir) = test_state().await;
-        let room = create_room(&state).await.unwrap();
+        let room = create_room(&state, false).await.unwrap();
         let worker = register_worker(&state, &room.id).await.unwrap();
 
         let events = handle_worker_message(
@@ -459,7 +482,7 @@ mod tests {
     #[tokio::test]
     async fn task_result_completes_job() {
         let (state, _dir) = test_state().await;
-        let room = create_room(&state).await.unwrap();
+        let room = create_room(&state, false).await.unwrap();
 
         let job = sample_job(&room.id);
         state
@@ -492,7 +515,7 @@ mod tests {
     #[tokio::test]
     async fn task_failed_fails_job() {
         let (state, _dir) = test_state().await;
-        let room = create_room(&state).await.unwrap();
+        let room = create_room(&state, false).await.unwrap();
 
         let job = sample_job(&room.id);
         state
@@ -523,7 +546,7 @@ mod tests {
     #[tokio::test]
     async fn submit_dispatches_artifact_and_task() {
         let (state, _dir) = test_state().await;
-        let room = create_room(&state).await.unwrap();
+        let room = create_room(&state, false).await.unwrap();
 
         let (worker_tx, mut worker_rx) = tokio::sync::mpsc::channel(10);
         state
@@ -583,7 +606,7 @@ mod tests {
     #[tokio::test]
     async fn submit_rejects_unknown_worker() {
         let (state, _dir) = test_state().await;
-        let room = create_room(&state).await.unwrap();
+        let room = create_room(&state, false).await.unwrap();
 
         let tasks = vec![NewTask {
             worker_id: "ghost".into(),

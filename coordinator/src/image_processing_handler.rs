@@ -227,7 +227,7 @@ mod tests {
             .unwrap();
         repo.migrate().await.unwrap();
         let state = AppState::new(repo);
-        let room = service::create_room(&state).await.unwrap();
+        let room = service::create_room(&state, false).await.unwrap();
         for worker_id in ["worker-1", "worker-2"] {
             let (sender, _receiver) = tokio::sync::mpsc::channel(10);
             state

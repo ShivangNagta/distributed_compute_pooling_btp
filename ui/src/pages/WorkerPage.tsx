@@ -3,7 +3,7 @@ import { CapabilityList } from '../components/CapabilityList'
 import { CopyButton } from '../components/CopyButton'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
-import { coordinatorWsUrl, parseMessage } from '../coordinator'
+import { COORDINATOR_URL, coordinatorWsUrl, parseMessage } from '../coordinator'
 import { runTask } from '../lib/wasm'
 import { statusTone, taskStatusTone } from '../lib/status'
 import {
@@ -11,7 +11,7 @@ import {
   saveWorkerRooms,
   type StoredJoinedRoom,
 } from '../lib/storage'
-import type { Artifact, Capabilities, TaskStatus } from '../types'
+import type { Artifact, Capabilities, Room, TaskStatus } from '../types'
 
 type WorkerActivity = {
   taskId: string
@@ -214,6 +214,7 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
   const [joinedRooms, setJoinedRooms] = useState<StoredJoinedRoom[]>(() =>
     loadWorkerRooms(),
   )
+  const [passwordlessRooms, setPasswordlessRooms] = useState<Room[]>([])
   const [status, setStatus] = useState(
     'Join a room to start contributing resources.',
   )
@@ -223,6 +224,24 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     saveWorkerRooms(joinedRooms)
   }, [joinedRooms])
+
+  useEffect(() => {
+    let cancelled = false
+    const loadPasswordlessRooms = async () => {
+      try {
+        const response = await fetch(`${COORDINATOR_URL}/rooms/passwordless`)
+        if (!response.ok) return
+        const rooms = (await response.json()) as Room[]
+        if (!cancelled) setPasswordlessRooms(rooms)
+      } catch {
+        // Passwordless room discovery is best-effort; ignore failures.
+      }
+    }
+    void loadPasswordlessRooms()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const upsertRoom = (
     current: StoredJoinedRoom[],
@@ -237,13 +256,16 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
         : room,
     )
 
-  const joinRoom = async () => {
+  const joinRoom = async (
+    roomIdOverride?: string,
+    roomTokenOverride?: string,
+  ) => {
     try {
       setIsJoining(true)
       setStatus('Validating room details...')
 
-      const roomId = roomIdInput.trim()
-      const roomToken = roomTokenInput.trim()
+      const roomId = (roomIdOverride ?? roomIdInput).trim()
+      const roomToken = (roomTokenOverride ?? roomTokenInput).trim()
 
       if (!roomId || !roomToken) {
         throw new Error('Both room ID and room token are required.')
@@ -358,7 +380,7 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
             <button
               type="button"
               disabled={isJoining}
-              onClick={joinRoom}
+              onClick={() => void joinRoom()}
               className="btn btn-primary mt-5 w-full"
             >
               {isJoining ? 'Joining...' : 'Join room'}
@@ -367,6 +389,37 @@ function WorkerPage({ onBack }: { onBack: () => void }) {
             {status ? (
               <p className="mt-4 text-sm text-tx-muted">{status}</p>
             ) : null}
+
+            {passwordlessRooms.length > 0 ? (
+              <div className="mt-5 border-t border-border pt-4">
+                <h3 className="section-title">Passwordless rooms</h3>
+                <ul className="mt-3 space-y-2">
+                  {passwordlessRooms.map((room) => (
+                    <li
+                      key={room.id}
+                      className="flex items-center justify-between gap-2 rounded-sm border border-border-strong bg-panel p-2.5"
+                    >
+                      <span className="mono truncate text-tx-primary">
+                        {room.id}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() =>
+                          void joinRoom(room.id, room.worker_token)
+                        }
+                      >
+                        Join
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="mt-5 text-sm text-tx-muted">
+                No passwordless rooms available.
+              </p>
+            )}
           </section>
 
           <section className="card p-5">

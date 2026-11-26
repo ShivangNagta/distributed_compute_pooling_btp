@@ -24,6 +24,10 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/", get(root))
         .route("/create_room", post(room::create_room_handler))
+        .route(
+            "/rooms/passwordless",
+            get(room::list_passwordless_rooms_handler),
+        )
         .route("/ws/{room_id}/{client_token}", get(room::ws_handler))
         .route(
             "/ws/join_room/{room_id}/{room_token}",

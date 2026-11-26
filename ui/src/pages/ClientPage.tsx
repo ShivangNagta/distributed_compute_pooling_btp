@@ -397,6 +397,8 @@ function ClientPage({ onBack }: { onBack: () => void }) {
   )
   const [error, setError] = useState<string | null>(null)
 
+  const [passwordless, setPasswordless] = useState(false)
+
   const [jobs, setJobs] = useState<JobRecord[]>([])
   const [jobName, setJobName] = useState(EXAMPLES[0].title)
   const [exampleId, setExampleId] = useState(EXAMPLES[0].id)
@@ -570,6 +572,8 @@ function ClientPage({ onBack }: { onBack: () => void }) {
     try {
       const response = await fetch(`${COORDINATOR_URL}/create_room`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passwordless }),
       })
       if (!response.ok) {
         throw new Error(`Room creation failed (${response.status})`)
@@ -1019,6 +1023,25 @@ function ClientPage({ onBack }: { onBack: () => void }) {
             Back
           </button>
         </PageHeader>
+
+        <section className="card p-5">
+          <h2 className="section-title">New room</h2>
+          <div className="mt-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                id="room-passwordless"
+                type="checkbox"
+                checked={passwordless}
+                onChange={(event) => setPasswordless(event.target.checked)}
+                className="h-4 w-4 rounded-sm border-border-strong accent-accent"
+              />
+              <span>Passwordless room</span>
+            </label>
+            <p className="mt-2 text-sm text-tx-muted">
+              Create a passwordless room. Workers join without a room token.
+            </p>
+          </div>
+        </section>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="card p-4">

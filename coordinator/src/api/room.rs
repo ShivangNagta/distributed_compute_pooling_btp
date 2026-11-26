@@ -8,13 +8,14 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use futures_util::{SinkExt, StreamExt};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
 use crate::app_state::{AppState, BUFFER_SIZE};
-use crate::contracts::RoomStatus;
+use crate::contracts::{Room, RoomStatus};
 use crate::error::AppError;
 use crate::service;
+use crate::service::passwordless_worker_token;
 
 #[derive(Serialize)]
 pub struct CreateRoomResponse {
@@ -23,15 +24,32 @@ pub struct CreateRoomResponse {
     pub worker_token: String,
 }
 
+#[derive(Deserialize)]
+pub struct CreateRoomRequest {
+    #[serde(default)]
+    pub passwordless: bool,
+}
+
 pub async fn create_room_handler(
     State(state): State<AppState>,
+    Json(request): Json<CreateRoomRequest>,
 ) -> Result<Json<CreateRoomResponse>, AppError> {
-    let room = service::create_room(&state).await?;
+    let room = service::create_room(&state, request.passwordless).await?;
     Ok(Json(CreateRoomResponse {
         room_id: room.id,
         client_token: room.client_token,
         worker_token: room.worker_token,
     }))
+}
+
+pub async fn list_passwordless_rooms_handler(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<Room>>, AppError> {
+    let rooms = state
+        .repo
+        .list_passwordless_rooms(&passwordless_worker_token())
+        .await?;
+    Ok(Json(rooms))
 }
 
 pub async fn ws_handler(
@@ -104,7 +122,8 @@ mod tests {
                 Request::builder()
                     .method("POST")
                     .uri("/create_room")
-                    .body(Body::empty())
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"passwordless":false}"#))
                     .unwrap(),
             )
             .await

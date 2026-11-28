@@ -51,7 +51,7 @@ flowchart BT
 
 ## Quick start
 
-- Backend: `cd coordinator && cargo run`
+- Backend: `cd coordinator && go run ./cmd/coordinator`
 - Frontend: `cd ui && npm run dev`
 
 Coordinator on `http://localhost:3000`, UI on `http://localhost:8080`.

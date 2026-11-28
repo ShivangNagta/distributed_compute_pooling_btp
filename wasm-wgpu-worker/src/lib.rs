@@ -1,4 +1,3 @@
-#[path = "../../src/wgpu_worker.rs"]
 mod runtime;
 
 use wasm_bindgen::prelude::*;

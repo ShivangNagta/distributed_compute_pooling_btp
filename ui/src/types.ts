@@ -74,7 +74,7 @@ export interface Task {
 }
 
 // One wire contract shared by both channels. Mirrors
-// coordinator/src/contracts.rs.
+// coordinator/internal/contracts/contracts.go.
 export type Message =
   | { type: 'capabilities'; payload: Capabilities }
   | { type: 'worker_joined'; payload: Worker }

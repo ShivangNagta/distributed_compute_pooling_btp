@@ -4,3 +4,4 @@ target
 pkg/
 data
 *.db
+coordinator/coordinator

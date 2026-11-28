@@ -1,16 +1,19 @@
-FROM rust:1-bookworm AS builder
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
 
 COPY . .
 
-RUN cargo build --release
+RUN CGO_ENABLED=0 go build -o /coordinator ./cmd/coordinator
 
-FROM debian:bookworm-slim
+FROM alpine:3.21
 
 WORKDIR /app
 
-COPY --from=builder /app/target/release/coordinator /usr/local/bin/coordinator
+COPY --from=builder /coordinator /usr/local/bin/coordinator
 
 ENV DATABASE_PATH=/data/coordinator.db
 
